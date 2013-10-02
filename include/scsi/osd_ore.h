@@ -76,7 +76,7 @@ struct ore_components {
 	struct ore_dev	**ods;
 };
 
-/* ore_comp_dev Recievies a logical device index */
+/* ore_comp_dev Receivies a logical device index */
 static inline struct osd_dev *ore_comp_dev(
 	const struct ore_components *oc, unsigned i)
 {

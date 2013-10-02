@@ -1240,7 +1240,7 @@ static int iscsi_check_proposer_state(struct iscsi_param *param, char *value)
 	}
 
 	if (IS_TYPE_NUMBER_RANGE(param)) {
-		u32 left_val = 0, right_val = 0, recieved_value = 0;
+		u32 left_val = 0, right_val = 0, received_value = 0;
 		char *left_val_ptr = NULL, *right_val_ptr = NULL;
 		char *tilde_ptr = NULL;
 
@@ -1268,15 +1268,15 @@ static int iscsi_check_proposer_state(struct iscsi_param *param, char *value)
 		right_val_ptr = param->value + strlen(left_val_ptr) + 1;
 		left_val = simple_strtoul(left_val_ptr, NULL, 0);
 		right_val = simple_strtoul(right_val_ptr, NULL, 0);
-		recieved_value = simple_strtoul(value, NULL, 0);
+		received_value = simple_strtoul(value, NULL, 0);
 
 		*tilde_ptr = '~';
 
-		if ((recieved_value < left_val) ||
-		    (recieved_value > right_val)) {
+		if ((received_value < left_val) ||
+		    (received_value > right_val)) {
 			pr_err("Illegal response \"%s=%u\", value must"
 				" be between %u and %u.\n", param->name,
-				recieved_value, left_val, right_val);
+				received_value, left_val, right_val);
 			return -1;
 		}
 	} else if (IS_TYPE_VALUE_LIST(param)) {

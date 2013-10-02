@@ -48,9 +48,9 @@
 #define XGMAC_REMOTE_WAKE	0x00000700	/* Remote Wake-Up Frm Filter */
 #define XGMAC_PMT		0x00000704	/* PMT Control and Status */
 #define XGMAC_MMC_CTRL		0x00000800	/* XGMAC MMC Control */
-#define XGMAC_MMC_INTR_RX	0x00000804	/* Recieve Interrupt */
+#define XGMAC_MMC_INTR_RX	0x00000804	/* Receive Interrupt */
 #define XGMAC_MMC_INTR_TX	0x00000808	/* Transmit Interrupt */
-#define XGMAC_MMC_INTR_MASK_RX	0x0000080c	/* Recieve Interrupt Mask */
+#define XGMAC_MMC_INTR_MASK_RX	0x0000080c	/* Receive Interrupt Mask */
 #define XGMAC_MMC_INTR_MASK_TX	0x00000810	/* Transmit Interrupt Mask */
 
 /* Hardware TX Statistics Counters */

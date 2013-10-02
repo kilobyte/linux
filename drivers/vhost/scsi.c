@@ -1030,13 +1030,13 @@ vhost_scsi_handle_vq(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 		cmd->tvc_resp = vq->iov[out].iov_base;
 
 		/*
-		 * Copy in the recieved CDB descriptor into cmd->tvc_cdb
+		 * Copy in the received CDB descriptor into cmd->tvc_cdb
 		 * that will be used by tcm_vhost_new_cmd_map() and down into
 		 * target_setup_cmd_from_cdb()
 		 */
 		memcpy(cmd->tvc_cdb, v_req.cdb, TCM_VHOST_MAX_CDB_SIZE);
 		/*
-		 * Check that the recieved CDB size does not exceeded our
+		 * Check that the received CDB size does not exceeded our
 		 * hardcoded max for tcm_vhost
 		 */
 		/* TODO what if cdb was too small for varlen cdb header? */

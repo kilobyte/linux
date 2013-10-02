@@ -53,7 +53,7 @@ static int zte_ev_usb_serial_open(struct tty_struct *tty,
 				 USB_CTRL_GET_TIMEOUT);
 	dev_dbg(dev, "result = %d\n", result);
 
-	/* send  2st cmd and recieve data */
+	/* send  2st cmd and receive data */
 	/*
 	 * 16.0  CTL    a1 21 00 00  00 00 07 00   CLASS              25.1.0(5)
 	 * 16.0  DI     00 96 00 00  00 00 08
@@ -183,7 +183,7 @@ static void zte_ev_usb_serial_close(struct usb_serial_port *port)
 				 USB_CTRL_GET_TIMEOUT);
 	dev_dbg(dev, "result = %d\n", result);
 
-	/* send  3st cmd and recieve data */
+	/* send  3st cmd and receive data */
 	/*
 	 * 16.0  CTL    a1 21 00 00  00 00 07 00      CLASS         25.1.0(5)
 	 * 16.0  DI     00 08 07 00  00 00 08

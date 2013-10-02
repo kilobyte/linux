@@ -1176,7 +1176,7 @@ static int cfhsi_open(struct net_device *ndev)
 	/* Initialize aggregation timeout */
 	cfhsi->cfg.aggregation_timeout = hsi_default_config.aggregation_timeout;
 
-	/* Initialize recieve vaiables. */
+	/* Initialize receive vaiables. */
 	cfhsi->rx_ptr = cfhsi->rx_buf;
 	cfhsi->rx_len = CFHSI_DESC_SZ;
 

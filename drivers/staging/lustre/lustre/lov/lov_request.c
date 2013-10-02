@@ -1237,7 +1237,7 @@ int lov_fini_sync_set(struct lov_request_set *set)
 }
 
 /* The callback for osc_sync that finilizes a request info when a
- * response is recieved. */
+ * response is received. */
 static int cb_sync_update(void *cookie, int rc)
 {
 	struct obd_info *oinfo = cookie;

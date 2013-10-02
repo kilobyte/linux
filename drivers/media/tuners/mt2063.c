@@ -1195,7 +1195,7 @@ static u32 mt2063_set_dnc_output_enable(struct mt2063_state *state,
  *   DNC Output is selected, the other is always off)
  *
  * @state:	ptr to mt2063_state structure
- * @Mode:	desired reciever delivery system
+ * @Mode:	desired receiver delivery system
  *
  * Note: Register cache must be valid for it to work
  */

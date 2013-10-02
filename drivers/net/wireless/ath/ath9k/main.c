@@ -2247,7 +2247,7 @@ static int ath9k_suspend(struct ieee80211_hw *hw,
 	ath9k_stop_btcoex(sc);
 
 	/*
-	 * Enable wake up on recieving disassoc/deauth
+	 * Enable wake up on receiving disassoc/deauth
 	 * frame by default.
 	 */
 	ath9k_wow_add_disassoc_deauth_pattern(sc);
