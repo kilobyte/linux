@@ -92,7 +92,7 @@ typedef enum lru_status
  * list_lru_walk_node: walk a list_lru, isolating and disposing freeable items.
  * @lru: the lru pointer.
  * @nid: the node id to scan from.
- * @isolate: callback function that is resposible for deciding what to do with
+ * @isolate: callback function that is responsible for deciding what to do with
  *  the item currently being scanned
  * @cb_arg: opaque type that will be passed to @isolate
  * @nr_to_walk: how many items to scan.

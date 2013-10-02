@@ -74,7 +74,7 @@
 #define REG_TO_AHB_SPEED(reg)		((((reg) >> 15) & 0x7) * 10 + 130)
 #define AHB_SPEED_TO_REG(x)		((((x - 130)) / 10) << 15)
 
-/* it is posible to override some settings, use >> OVERRIDE_xxxx_SHIFT */
+/* it is possible to override some settings, use >> OVERRIDE_xxxx_SHIFT */
 #define OVERRIDE_FLASH_TYPE_SHIFT	16
 #define OVERRIDE_FLASH_WIDTH_SHIFT	16
 #define OVERRIDE_FLASH_SIZE_SHIFT	16

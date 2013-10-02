@@ -372,7 +372,7 @@ err:
 
 /* readpage_strip is called either directly from readpage() or by the VFS from
  * within read_cache_pages(), to add one more page to be read. It will try to
- * collect as many contiguous pages as posible. If a discontinuity is
+ * collect as many contiguous pages as possible. If a discontinuity is
  * encountered, or it runs out of resources, it will submit the previous segment
  * and will start a new collection. Eventually caller must submit the last
  * segment if present.

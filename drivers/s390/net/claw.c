@@ -1257,7 +1257,7 @@ claw_hw_tx(struct sk_buff *skb, struct net_device *dev, long linkid)
 	CLAW_DBF_TEXT(4, trace, "hw_tx");
 	privptr = (struct claw_privbk *)(dev->ml_priv);
 	p_env =privptr->p_env;
-	claw_free_wrt_buf(dev);	/* Clean up free chain if posible */
+	claw_free_wrt_buf(dev);	/* Clean up free chain if possible */
         /*  scan the write queue to free any completed write packets   */
         p_first_ccw=NULL;
         p_last_ccw=NULL;
