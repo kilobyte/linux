@@ -4183,7 +4183,7 @@ static int intel_iommu_add_device(struct device *dev)
 	/*
 	 * If it's a multifunction device that does not support our
 	 * required ACS flags, add to the same group as lowest numbered
-	 * function that also does not suport the required ACS flags.
+	 * function that also does not support the required ACS flags.
 	 */
 	if (dma_pdev->multifunction &&
 	    !pci_acs_enabled(dma_pdev, REQ_ACS_FLAGS)) {

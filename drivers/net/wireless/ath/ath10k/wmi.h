@@ -1191,7 +1191,7 @@ struct wmi_resource_config {
 	 * In offload mode target supports features like WOW, chatter and
 	 * other protocol offloads. In order to support them some
 	 * functionalities like reorder buffering, PN checking need to be
-	 * done in target. This determines maximum number of peers suported
+	 * done in target. This determines maximum number of peers supported
 	 * by target in offload mode
 	 */
 	__le32 num_offload_peers;
