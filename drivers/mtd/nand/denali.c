@@ -967,7 +967,7 @@ static bool handle_ecc(struct denali_nand_info *denali, uint8_t *buf,
 				check_erased_page = true;
 			}
 		} while (!ECC_LAST_ERR(err_correction_info));
-		/* Once handle all ecc errors, controller will triger
+		/* Once handle all ecc errors, controller will trigger
 		 * a ECC_TRANSACTION_DONE interrupt, so here just wait
 		 * for a while for this interrupt
 		 * */

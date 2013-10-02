@@ -745,7 +745,7 @@ dt3155_init_board(struct pci_dev *pdev)
 	mmiowb();
 	iowrite32(0xEEEEEE01, pd->regs + EVEN_PIXEL_FMT);
 	iowrite32(0xEEEEEE01, pd->regs + ODD_PIXEL_FMT);
-	iowrite32(0x00000020, pd->regs + FIFO_TRIGER);
+	iowrite32(0x00000020, pd->regs + FIFO_TRIGGER);
 	iowrite32(0x00000103, pd->regs + XFER_MODE);
 	iowrite32(0, pd->regs + RETRY_WAIT_CNT);
 	iowrite32(0, pd->regs + INT_CSR);

@@ -40,7 +40,7 @@
  * struct cti - cross trigger interface struct
  * @base: mapped virtual address for the cti base
  * @irq: irq number for the cti
- * @trig_out_for_irq: triger out number which will cause
+ * @trig_out_for_irq: trigger out number which will cause
  *	the @irq happen
  *
  * cti struct used to operate cti registers.
@@ -56,7 +56,7 @@ struct cti {
  * @cti: cti instance
  * @base: mapped virtual address for the cti base
  * @irq: irq number for the cti
- * @trig_out: triger out number which will cause
+ * @trig_out: trigger out number which will cause
  *	the @irq happen
  *
  * called by machine code to pass the board dependent

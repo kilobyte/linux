@@ -304,7 +304,7 @@
 #define UART_RSA_MSR_SWAP (1 << 0) /* Swap low/high 8 bytes in I/O port addr */
 #define UART_RSA_MSR_FIFO (1 << 2) /* Enable the external FIFO */
 #define UART_RSA_MSR_FLOW (1 << 3) /* Enable the auto RTS/CTS flow control */
-#define UART_RSA_MSR_ITYP (1 << 4) /* Level (1) / Edge triger (0) */
+#define UART_RSA_MSR_ITYP (1 << 4) /* Level (1) / Edge trigger (0) */
 
 #define UART_RSA_IER ((UART_RSA_BASE) + 1) /* I/O: Interrupt Enable Register */
 

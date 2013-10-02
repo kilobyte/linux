@@ -157,7 +157,7 @@ int test__bp_signal(void)
 	ioctl(fd2, PERF_EVENT_IOC_ENABLE, 0);
 
 	/*
-	 * Kick off the test by trigering 'fd1'
+	 * Kick off the test by triggering 'fd1'
 	 * breakpoint.
 	 */
 	test_function();

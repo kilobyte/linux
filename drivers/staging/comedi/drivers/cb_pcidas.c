@@ -118,7 +118,7 @@ analog triggering on 1602 series
 #define   ANALOG_TRIGGER	0x3	/* ext. analog trigger */
 #define   TRIGGER_MASK		0x3	/* start trigger mask */
 #define   TGPOL			0x04	/* invert trigger (1602 only) */
-#define   TGSEL			0x08	/* edge/level trigerred (1602 only) */
+#define   TGSEL			0x08	/* edge/level triggerred (1602 only) */
 #define   TGEN			0x10	/* enable external start trigger */
 #define   BURSTE		0x20	/* burst mode enable */
 #define   XTRCL			0x80	/* clear external trigger */
