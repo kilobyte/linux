@@ -43,7 +43,7 @@
 				 */
 #else
 	movi	a3, 0x29	/* non-MX -- Most cores use Std Memory
-				 * Controlers which usually can't use RCW
+				 * Controllers which usually can't use RCW
 				 */
 #endif
 	wsr	a3, atomctl

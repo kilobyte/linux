@@ -630,7 +630,7 @@ jump_start_kernel:
 /* ========================================[ cache ]=== */
 
 	/* aligment here so we don't change memory offsets with
-	 * memory controler defined
+	 * memory controller defined
 	 */
 	.align 0x2000
 

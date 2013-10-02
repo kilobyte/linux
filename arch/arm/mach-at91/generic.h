@@ -72,7 +72,7 @@ extern void at91_ioremap_shdwc(u32 base_addr);
 /* Matrix */
 extern void at91_ioremap_matrix(u32 base_addr);
 
-/* Ram Controler */
+/* Ram Controller */
 extern void at91_ioremap_ramc(int id, u32 addr, u32 size);
 
  /* GPIO */

@@ -584,8 +584,8 @@ static int gunze_read_data(struct usbtouch_usb *dev, unsigned char *pkt)
  * DMC TSC-10/25 Part
  *
  * Documentation about the controller and it's protocol can be found at
- *   http://www.dmccoltd.com/files/controler/tsc10usb_pi_e.pdf
- *   http://www.dmccoltd.com/files/controler/tsc25_usb_e.pdf
+ *   http://www.dmccoltd.com/files/controller/tsc10usb_pi_e.pdf
+ *   http://www.dmccoltd.com/files/controller/tsc25_usb_e.pdf
  */
 #ifdef CONFIG_TOUCHSCREEN_USB_DMC_TSC10
 

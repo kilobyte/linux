@@ -68,7 +68,7 @@ typedef void (*ftrace_func_t)(unsigned long ip, unsigned long parent_ip,
  * DYNAMIC - set when ftrace_ops is registered to denote dynamically
  *           allocated ftrace_ops which need special care
  * CONTROL - set manualy by ftrace_ops user to denote the ftrace_ops
- *           could be controled by following calls:
+ *           could be controlled by following calls:
  *             ftrace_function_local_enable
  *             ftrace_function_local_disable
  * SAVE_REGS - The ftrace_ops wants regs saved at each function called

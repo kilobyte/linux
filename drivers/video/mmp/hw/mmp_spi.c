@@ -1,6 +1,6 @@
 /*
  * linux/drivers/video/mmp/hw/mmp_spi.c
- * using the spi in LCD controler for commands send
+ * using the spi in LCD controller for commands send
  *
  * Copyright (C) 2012 Marvell Technology Group Ltd.
  * Authors:  Guoqing Li <ligq@marvell.com>
