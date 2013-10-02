@@ -61,7 +61,7 @@ MODULE_PARM_DESC(scroll, "Enable scroll-wheel on MS Office and similar keyboards
 
 static bool atkbd_extra;
 module_param_named(extra, atkbd_extra, bool, 0);
-MODULE_PARM_DESC(extra, "Enable extra LEDs and keys on IBM RapidAcces, EzKey and similar keyboards");
+MODULE_PARM_DESC(extra, "Enable extra LEDs and keys on IBM RapidAccess, EzKey and similar keyboards");
 
 static bool atkbd_terminal;
 module_param_named(terminal, atkbd_terminal, bool, 0);

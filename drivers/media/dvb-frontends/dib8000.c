@@ -533,7 +533,7 @@ static int dib8000_set_adc_state(struct dib8000_state *state, enum dibx000_adc_s
 			dib8000_write_word(state, 1925, reg |
 					(1<<4) | (1<<2));
 
-			/* read acces to make it works... strange ... */
+			/* read access to make it works... strange ... */
 			reg = dib8000_read_word(state, 1925);
 			msleep(20);
 			/* en_slowAdc = 1 & reset_sladc = 0 */
@@ -1798,7 +1798,7 @@ static int dib8096p_tuner_xfer(struct i2c_adapter *i2c_adap,
 			}
 	}
 
-	if (apb_address != 0) /* R/W acces via APB */
+	if (apb_address != 0) /* R/W access via APB */
 		return dib8096p_rw_on_apb(i2c_adap, msg, num, apb_address);
 	else  /* R/W access via SERPAR  */
 		return dib8096p_tuner_rw_serpar(i2c_adap, msg, num);

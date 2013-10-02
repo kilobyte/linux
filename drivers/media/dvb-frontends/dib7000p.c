@@ -305,7 +305,7 @@ static void dib7000p_set_adc_state(struct dib7000p_state *state, enum dibx000_ad
 
 			dib7000p_write_word(state, 1925, reg | (1 << 4) | (1 << 2));	/* en_slowAdc = 1 & reset_sladc = 1 */
 
-			reg = dib7000p_read_word(state, 1925);	/* read acces to make it works... strange ... */
+			reg = dib7000p_read_word(state, 1925);	/* read access to make it works... strange ... */
 			msleep(200);
 			dib7000p_write_word(state, 1925, reg & ~(1 << 4));	/* en_slowAdc = 1 & reset_sladc = 0 */
 
@@ -2014,7 +2014,7 @@ static int dib7090_tuner_xfer(struct i2c_adapter *i2c_adap, struct i2c_msg msg[]
 		}
 	}
 
-	if (apb_address != 0)	/* R/W acces via APB */
+	if (apb_address != 0)	/* R/W access via APB */
 		return dib7090p_rw_on_apb(i2c_adap, msg, num, apb_address);
 	else			/* R/W access via SERPAR  */
 		return w7090p_tuner_rw_serpar(i2c_adap, msg, num);

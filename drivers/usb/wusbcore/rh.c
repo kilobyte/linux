@@ -90,7 +90,7 @@
  *
  * @wusbhc is assumed referenced and @wusbhc->mutex unlocked.
  *
- * Supposedly we are the only thread accesing @wusbhc->port; in any
+ * Supposedly we are the only thread accessing @wusbhc->port; in any
  * case, maybe we should move the mutex locking from
  * wusbhc_devconnect_auth() to here.
  *

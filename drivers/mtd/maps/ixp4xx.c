@@ -93,7 +93,7 @@ static map_word ixp4xx_read16(struct map_info *map, unsigned long ofs)
 }
 
 /*
- * The IXP4xx expansion bus only allows 16-bit wide acceses
+ * The IXP4xx expansion bus only allows 16-bit wide accesses
  * when attached to a 16-bit wide device (such as the 28F128J3A),
  * so we can't just memcpy_fromio().
  */

@@ -1347,7 +1347,7 @@ void facility_unavailable_exception(struct pt_regs *regs)
 
 	status = value >> 56;
 	if (status == FSCR_DSCR_LG) {
-		/* User is acessing the DSCR.  Set the inherit bit and allow
+		/* User is accessing the DSCR.  Set the inherit bit and allow
 		 * the user to set it directly in future by setting via the
 		 * FSCR DSCR bit.  We always leave HFSCR DSCR set.
 		 */

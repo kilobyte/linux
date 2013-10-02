@@ -2167,7 +2167,7 @@ static int mv_udc_probe(struct platform_device *pdev)
 		return -EBUSY;
 	}
 
-	/* we will acces controller register, so enable the clk */
+	/* we will access controller register, so enable the clk */
 	retval = mv_udc_enable_internal(udc);
 	if (retval)
 		return retval;

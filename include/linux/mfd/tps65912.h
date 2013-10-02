@@ -285,7 +285,7 @@ struct tps65912_board {
 
 struct tps65912 {
 	struct device *dev;
-	/* for read/write acces */
+	/* for read/write access */
 	struct mutex io_mutex;
 
 	/* For device IO interfaces: I2C or SPI */

@@ -326,7 +326,7 @@ static int ipoctal_inst_slot(struct ipoctal *ipoctal, unsigned int bus_nr,
 
 	/*
 	 * IP-OCTAL has different addresses to copy its IRQ vector.
-	 * Depending of the carrier these addresses are accesible or not.
+	 * Depending of the carrier these addresses are accessible or not.
 	 * More info in the datasheet.
 	 */
 	ipoctal->dev->bus->ops->request_irq(ipoctal->dev,

@@ -36,7 +36,7 @@
  * The context ID is used by debuggers and trace logic, and
  * should be unique within all running processes.
  *
- * In big endian operation, the two 32 bit words are swapped if accesed by
+ * In big endian operation, the two 32 bit words are swapped if accessed by
  * non 64-bit operations.
  */
 #define ASID_FIRST_VERSION	(1ULL << ASID_BITS)

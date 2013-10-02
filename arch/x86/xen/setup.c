@@ -393,7 +393,7 @@ char * __init xen_memory_setup(void)
 
 	/*
 	 * Set P2M for all non-RAM pages and E820 gaps to be identity
-	 * type PFNs.  Any RAM pages that would be made inaccesible by
+	 * type PFNs.  Any RAM pages that would be made inaccessible by
 	 * this are first released.
 	 */
 	xen_released_pages = xen_set_identity_and_release(

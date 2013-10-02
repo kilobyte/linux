@@ -2303,7 +2303,7 @@ static int smsc911x_drv_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/* standard register acces */
+/* standard register access */
 static const struct smsc911x_ops standard_smsc911x_ops = {
 	.reg_read = __smsc911x_reg_read,
 	.reg_write = __smsc911x_reg_write,

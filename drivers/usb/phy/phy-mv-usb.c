@@ -756,7 +756,7 @@ static int mv_otg_probe(struct platform_device *pdev)
 		goto err_destroy_workqueue;
 	}
 
-	/* we will acces controller register, so enable the udc controller */
+	/* we will access controller register, so enable the udc controller */
 	retval = mv_otg_enable_internal(mvotg);
 	if (retval) {
 		dev_err(&pdev->dev, "mv otg enable error %d\n", retval);

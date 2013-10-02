@@ -254,7 +254,7 @@ static const struct
 	[I2400M_MS_ILLEGAL_VALUE] = { "illegal value", -EINVAL },
 	[I2400M_MS_MISSING_PARAMS] = { "missing parameters", -ENOMSG },
 	[I2400M_MS_VERSION_ERROR] = { "bad version", -EIO },
-	[I2400M_MS_ACCESSIBILITY_ERROR] = { "accesibility error", -EIO },
+	[I2400M_MS_ACCESSIBILITY_ERROR] = { "accessibility error", -EIO },
 	[I2400M_MS_BUSY] = { "busy", -EBUSY },
 	[I2400M_MS_CORRUPTED_TLV] = { "corrupted TLV", -EILSEQ },
 	[I2400M_MS_UNINITIALIZED] = { "not unitialized", -EILSEQ },

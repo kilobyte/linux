@@ -360,7 +360,7 @@ struct i2400m_barker_db;
  *     loaded and the device initialized.
  *
  *     Write to it only inside a i2400m->init_mutex protected area
- *     followed with a wmb(); rmb() before accesing (unless locked
+ *     followed with a wmb(); rmb() before accessing (unless locked
  *     inside i2400m->init_mutex). Read access can be loose like that
  *     [just using rmb()] because the paths that use this also do
  *     other error checks later on.
@@ -370,7 +370,7 @@ struct i2400m_barker_db;
  *     using the WiMAX state for certain hot paths).
  *
  *     Write to it only inside a i2400m->init_mutex protected area
- *     followed with a wmb(); rmb() before accesing (unless locked
+ *     followed with a wmb(); rmb() before accessing (unless locked
  *     inside i2400m->init_mutex). Read access can be loose like that
  *     [just using rmb()] because the paths that use this also do
  *     other error checks later on.

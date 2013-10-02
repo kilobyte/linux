@@ -645,7 +645,7 @@ static int epb_trans(struct qib_devdata *dd, u16 reg, u64 i_val, u64 *o_vp)
  * @wd: Write Data - value to set in register
  * @mask: ones where data should be spliced into reg.
  *
- * Basic register read/modify/write, with un-needed acesses elided. That is,
+ * Basic register read/modify/write, with un-needed accesses elided. That is,
  * a mask of zero will prevent write, while a mask of 0xFF will prevent read.
  * returns current (presumed, if a write was done) contents of selected
  * register, or <0 if errors.

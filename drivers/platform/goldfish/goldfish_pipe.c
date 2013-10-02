@@ -192,7 +192,7 @@ static int goldfish_pipe_error_convert(int status)
 
 /*
  * Notice: QEMU will return 0 for un-known register access, indicating
- * param_acess is supported or not
+ * param_access is supported or not
  */
 static int valid_batchbuffer_addr(struct goldfish_pipe_dev *dev,
 				  struct access_params *aps)
