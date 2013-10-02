@@ -322,7 +322,7 @@ static int __init tcb_clksrc_init(void)
 			((divided_rate + 500000) % 1000000) / 1000);
 
 	if (tc->tcb_config && tc->tcb_config->counter_width == 32) {
-		/* use apropriate function to read 32 bit counter */
+		/* use appropriate function to read 32 bit counter */
 		clksrc.read = tc_get_cycles32;
 		/* setup ony channel 0 */
 		tcb_setup_single_chan(tc, best_divisor_idx);

@@ -117,7 +117,7 @@ out_fail:
 	goto out;
 }
 
-static struct message *mesage__find(const char *msg)
+static struct message *message__find(const char *msg)
 {
 	struct message *m = message__list;
 
@@ -152,7 +152,7 @@ static int message__add(const char *msg, char *option, const char *file,
 	int rc = 0;
 	char bf[16384];
 	char *escaped = escape(msg, bf, sizeof(bf));
-	struct message *m = mesage__find(escaped);
+	struct message *m = message__find(escaped);
 
 	if (m != NULL)
 		rc = message__add_file_line(m, file, lineno);

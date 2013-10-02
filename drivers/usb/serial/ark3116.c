@@ -609,7 +609,7 @@ static void ark3116_read_int_callback(struct urb *urb)
 }
 
 
-/* Data comes in via the bulk (data) URB, erors/interrupts via the int URB.
+/* Data comes in via the bulk (data) URB, errors/interrupts via the int URB.
  * This means that we cannot be sure which data byte has an associated error
  * condition, so we report an error for all data in the next bulk read.
  *

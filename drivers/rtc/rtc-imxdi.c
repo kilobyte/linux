@@ -69,7 +69,7 @@
 
 /**
  * struct imxdi_dev - private imxdi rtc data
- * @pdev: pionter to platform dev
+ * @pdev: pointer to platform dev
  * @rtc: pointer to rtc struct
  * @ioaddr: IO registers pointer
  * @irq: dryice normal interrupt

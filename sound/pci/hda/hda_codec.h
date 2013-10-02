@@ -1150,7 +1150,7 @@ static inline void snd_hda_power_up(struct hda_codec *codec)
  *   back up.
  * @codec: HD-audio codec
  *
- * Cancel any power down operation hapenning on the work queue, then power up.
+ * Cancel any power down operation happenning on the work queue, then power up.
  */
 static inline void snd_hda_power_up_d3wait(struct hda_codec *codec)
 {

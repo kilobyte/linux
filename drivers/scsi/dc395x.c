@@ -106,7 +106,7 @@
 
 
 /*
- * Output a kernel mesage at the specified level and append the
+ * Output a kernel message at the specified level and append the
  * driver name and a ": " to the start of the message
  */
 #define dprintkl(level, format, arg...)  \
