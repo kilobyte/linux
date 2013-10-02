@@ -147,7 +147,7 @@ enum wa_quirks {
  *            read, so it is guaranteed to exist umodified while
  *            the device exists.
  *
- *            Endianess has been converted to CPU's.
+ *            Endianness has been converted to CPU's.
  *
  * @nep_* can be accessed without locking as its processing is
  *        serialized; we submit a NEP URB and it comes to

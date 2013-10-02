@@ -55,7 +55,7 @@ static struct kmem_cache *creg_cmd_pool;
 #elif defined(__BIG_ENDIAN)
 #define LITTLE_ENDIAN 0
 #else
-#error Unknown endianess!!! Aborting...
+#error Unknown endianness!!! Aborting...
 #endif
 
 static int copy_to_creg_data(struct rsxx_cardinfo *card,

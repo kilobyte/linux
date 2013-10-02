@@ -118,7 +118,7 @@ static const u16 gf128mul_table_bbe[256] = gf128mul_dat(xda_bbe);
 
 /* These functions multiply a field element by x, by x^4 and by x^8
  * in the polynomial field representation. It uses 32-bit word operations
- * to gain speed but compensates for machine endianess and hence works
+ * to gain speed but compensates for machine endianness and hence works
  * correctly on both styles of machine.
  */
 

@@ -103,7 +103,7 @@ static inline void writel(unsigned int v, volatile void __iomem *addr)
 }
 
 /* ioread and iowrite variants. thease are for now same as __raw_
- * variants of accessors. we might check for endianess in the feature
+ * variants of accessors. we might check for endianness in the feature
  */
 #define ioread8(addr)		__raw_readb((u8 *)(addr))
 #define ioread16(addr)		__raw_readw((u16 *)(addr))

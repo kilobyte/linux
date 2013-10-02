@@ -1010,10 +1010,10 @@ static int ace_setup(struct ace_device *ace)
 
 	/* set bus width */
 	if (ace->bus_width == ACE_BUS_WIDTH_16) {
-		/* 0x0101 should work regardless of endianess */
+		/* 0x0101 should work regardless of endianness */
 		ace_out_le16(ace, ACE_BUSMODE, 0x0101);
 
-		/* read it back to determine endianess */
+		/* read it back to determine endianness */
 		if (ace_in_le16(ace, ACE_BUSMODE) == 0x0001)
 			ace->reg_ops = &ace_reg_le16_ops;
 		else

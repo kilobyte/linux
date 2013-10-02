@@ -1797,7 +1797,7 @@ static int dvd_read_physical(struct cdrom_device_info *cdi, dvd_struct *s,
 
 	/*
 	 * place the data... really ugly, but at least we won't have to
-	 * worry about endianess in userspace.
+	 * worry about endianness in userspace.
 	 */
 	memset(layer, 0, sizeof(*layer));
 	layer->book_version = base[0] & 0xf;

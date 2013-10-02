@@ -533,7 +533,7 @@ calc_width_bits(unsigned baudrate, unsigned widthselect, unsigned clockselect)
  *
  * Attention: Writing addr overwrites status!
  *
- * ### FIXME: depends on endianess (but there ain't no non-i586 ob800 ;-)
+ * ### FIXME: depends on endianness (but there ain't no non-i586 ob800 ;-)
  */
 
 struct ring_descr_hw {

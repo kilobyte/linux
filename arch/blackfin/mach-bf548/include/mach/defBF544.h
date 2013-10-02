@@ -604,7 +604,7 @@
 /* Bit masks for HOST_CONTROL */
 
 #define                   HOST_EN  0x1        /* Host Enable */
-#define                  HOST_END  0x2        /* Host Endianess */
+#define                  HOST_END  0x2        /* Host Endianness */
 #define                 DATA_SIZE  0x4        /* Data Size */
 #define                  HOST_RST  0x8        /* Host Reset */
 #define                  HRDY_OVR  0x20       /* Host Ready Override */

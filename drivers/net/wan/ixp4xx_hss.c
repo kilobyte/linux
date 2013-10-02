@@ -135,7 +135,7 @@
 /* T1 @ 1.544MHz only: Fbit dictated in FIFO (default) or high Z */
 #define PCR_TX_FB_HIGH_IMP		0x00000400
 
-/* 56k data endiannes - which bit unused: high (default) or low */
+/* 56k data endianness - which bit unused: high (default) or low */
 #define PCR_TX_56KE_BIT_0_UNUSED	0x00000200
 
 /* 56k data transmission type: 32/8 bit data (default) or 56K data */

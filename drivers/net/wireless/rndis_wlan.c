@@ -113,7 +113,7 @@ MODULE_PARM_DESC(workaround_interval,
 
 
 /* NDIS data structures. Taken from wpa_supplicant driver_ndis.c
- * slightly modified for datatype endianess, etc
+ * slightly modified for datatype endianness, etc
  */
 #define NDIS_802_11_LENGTH_SSID 32
 #define NDIS_802_11_LENGTH_RATES 8

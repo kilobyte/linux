@@ -687,7 +687,7 @@ struct scu_task_context {
 	u32 strict_ordering:1;
 
 	/**
-	 * This field indicates the type of endianess to be utilized for the
+	 * This field indicates the type of endianness to be utilized for the
 	 * frame.  command, task, and response frames utilized control_frame
 	 * set to 1.
 	 */

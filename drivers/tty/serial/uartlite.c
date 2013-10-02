@@ -350,7 +350,7 @@ static int ulite_request_port(struct uart_port *port)
 	ret = uart_in32(ULITE_CONTROL, port);
 	uart_out32(ULITE_CONTROL_RST_TX, ULITE_CONTROL, port);
 	ret = uart_in32(ULITE_STATUS, port);
-	/* Endianess detection */
+	/* Endianness detection */
 	if ((ret & ULITE_STATUS_TXEMPTY) != ULITE_STATUS_TXEMPTY)
 		port->private_data = &uartlite_le;
 

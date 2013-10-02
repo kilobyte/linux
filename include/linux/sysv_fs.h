@@ -153,7 +153,7 @@ struct v7_super_block {
  * the limit used by Seventh Edition's ls, though is high enough to assume
  * that no reasonable file system would have that much entries in root
  * directory. Thus, if we see anything higher, we just probably got the
- * endiannes wrong. */
+ * endianness wrong. */
 #define V7_NFILES	1024
 /* The disk addresses are three-byte (despite direct block addresses being
  * aligned word-wise in inode). If the most significant byte is non-zero,

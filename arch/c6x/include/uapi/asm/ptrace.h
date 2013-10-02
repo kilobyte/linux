@@ -114,7 +114,7 @@
  * this struct defines the way the registers are stored on the
  * stack during a system call. fields defined with REG_PAIR
  * are saved and restored using double-word memory operations
- * which means the word ordering of the pair depends on endianess.
+ * which means the word ordering of the pair depends on endianness.
  */
 struct pt_regs {
 	REG_PAIR(tsr, orig_a4);

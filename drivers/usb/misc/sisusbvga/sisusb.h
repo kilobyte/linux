@@ -78,7 +78,7 @@
  *
  * 1) I/O ports, PCI config registers. The read/write()
  *    calls emulate inX/outX. Hence, the data is
- *    expected/delivered in machine endiannes by this
+ *    expected/delivered in machine endianness by this
  *    driver.
  * 2) Video memory. The data is copied 1:1. There is
  *    no swapping. Ever. This means for userland that

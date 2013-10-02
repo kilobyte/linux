@@ -318,7 +318,7 @@ islpci_mgt_receive(struct net_device *ndev)
 		pci_dma_sync_single_for_cpu(priv->pdev, buf->pci_addr,
 					    buf->size, PCI_DMA_FROMDEVICE);
 
-		/* Perform endianess conversion for PIMFOR header in-place. */
+		/* Perform endianness conversion for PIMFOR header in-place. */
 		header = pimfor_decode_header(buf->mem, frag_len);
 		if (!header) {
 			printk(KERN_WARNING "%s: no PIMFOR header found\n",

@@ -322,7 +322,7 @@ int snd_cs46xx_download(struct snd_cs46xx *chip,
 	dst = chip->region.idx[bank+1].remap_addr + offset;
 	len /= sizeof(u32);
 
-	/* writel already converts 32-bit value to right endianess */
+	/* writel already converts 32-bit value to right endianness */
 	while (len-- > 0) {
 		writel(*src++, dst);
 		dst += sizeof(u32);
@@ -351,7 +351,7 @@ int snd_cs46xx_clear_BA1(struct snd_cs46xx *chip,
 	dst = chip->region.idx[bank+1].remap_addr + offset;
 	len /= sizeof(u32);
 
-	/* writel already converts 32-bit value to right endianess */
+	/* writel already converts 32-bit value to right endianness */
 	while (len-- > 0) {
 		writel(0, dst);
 		dst += sizeof(u32);

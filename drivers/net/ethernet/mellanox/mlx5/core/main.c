@@ -154,7 +154,7 @@ static void mlx5_disable_msix(struct mlx5_core_dev *dev)
 	kfree(table->msix_arr);
 }
 
-struct mlx5_reg_host_endianess {
+struct mlx5_reg_host_endianness {
 	u8	he;
 	u8      rsvd[15];
 };
@@ -255,8 +255,8 @@ query_ex:
 
 static int set_hca_ctrl(struct mlx5_core_dev *dev)
 {
-	struct mlx5_reg_host_endianess he_in;
-	struct mlx5_reg_host_endianess he_out;
+	struct mlx5_reg_host_endianness he_in;
+	struct mlx5_reg_host_endianness he_out;
 	int err;
 
 	memset(&he_in, 0, sizeof(he_in));

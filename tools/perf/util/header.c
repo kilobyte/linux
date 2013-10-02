@@ -2461,7 +2461,7 @@ static const size_t attr_pipe_abi_sizes[] = {
 };
 
 /*
- * In the legacy pipe format, there is an implicit assumption that endiannesss
+ * In the legacy pipe format, there is an implicit assumption that endianness
  * between host recording the samples, and host parsing the samples is the
  * same. This is not always the case given that the pipe output may always be
  * redirected into a file and analyzed on a different machine with possibly a

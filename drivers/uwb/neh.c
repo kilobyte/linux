@@ -370,7 +370,7 @@ struct uwb_rc_neh *uwb_rc_neh_lookup(struct uwb_rc *rc,
  * defined by the WUSB Wired-Adapter Radio Control interface. We
  * just use it for the notification code.
  *
- * On each case statement we just transcode endianess of the different
+ * On each case statement we just transcode endianness of the different
  * fields. We declare a pointer to a RCI definition of an event, and
  * then to a UWB definition of the same event (which are the same,
  * remember). Event if we use different pointers

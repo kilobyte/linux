@@ -135,7 +135,7 @@ static void set_prot_desc_tx(struct ux500_msp *msp,
 		temp_reg |= MSP_P2_ELEM_LEN_BITS(data_size);
 	}
 	temp_reg |= MSP_DATA_DELAY_BITS(protdesc->tx_data_delay);
-	temp_reg |= MSP_SET_ENDIANNES_BIT(protdesc->tx_byte_order);
+	temp_reg |= MSP_SET_ENDIANNESS_BIT(protdesc->tx_byte_order);
 	temp_reg |= MSP_FSYNC_POL(protdesc->tx_fsync_pol);
 	temp_reg |= MSP_DATA_WORD_SWAP(protdesc->tx_half_word_swap);
 	temp_reg |= MSP_SET_COMPANDING_MODE(protdesc->compression_mode);
@@ -163,7 +163,7 @@ static void set_prot_desc_rx(struct ux500_msp *msp,
 	}
 
 	temp_reg |= MSP_DATA_DELAY_BITS(protdesc->rx_data_delay);
-	temp_reg |= MSP_SET_ENDIANNES_BIT(protdesc->rx_byte_order);
+	temp_reg |= MSP_SET_ENDIANNESS_BIT(protdesc->rx_byte_order);
 	temp_reg |= MSP_FSYNC_POL(protdesc->rx_fsync_pol);
 	temp_reg |= MSP_DATA_WORD_SWAP(protdesc->rx_half_word_swap);
 	temp_reg |= MSP_SET_COMPANDING_MODE(protdesc->expansion_mode);

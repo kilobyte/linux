@@ -176,7 +176,7 @@ so that playing a file was a matter of using:
    % aplay -D hw:1,1 -c2 -t raw -r48000 -fS16_BE test_S16_LE.raw
 where "test_S16_LE.raw" was in fact a little-endian sample file.
 
-Thanks to Hakan Lennestal (who discovered the Little-Endiannes of the device in
+Thanks to Hakan Lennestal (who discovered the Little-Endianness of the device in
 these modes) a fix has been committed (expected in kernel 2.6.23) and
 Alsa now reports Little-Endian interfaces. Thus playing a file now is as simple as
 using:

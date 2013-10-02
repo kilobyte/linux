@@ -287,7 +287,7 @@ static int xilinxfb_assign(struct platform_device *pdev,
 	/* Tell the hardware where the frame buffer is */
 	xilinx_fb_out32(drvdata, REG_FB_ADDR, drvdata->fb_phys);
 	rc = xilinx_fb_in32(drvdata, REG_FB_ADDR);
-	/* Endianess detection */
+	/* Endianness detection */
 	if (rc != drvdata->fb_phys) {
 		drvdata->flags |= LITTLE_ENDIAN_ACCESS;
 		xilinx_fb_out32(drvdata, REG_FB_ADDR, drvdata->fb_phys);

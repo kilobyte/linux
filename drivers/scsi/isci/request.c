@@ -462,7 +462,7 @@ static void scu_ssp_io_request_construct_task_context(struct isci_request *ireq,
  *    ahead of other task destined for the same Remote Node. -# task_type ==
  *    SCU_TASK_TYPE_IOREAD.  This simply indicates that a normal request type
  *    (i.e. non-raw frame) is being utilized to perform task management. -#
- *    control_frame == 1.  This ensures that the proper endianess is set so
+ *    control_frame == 1.  This ensures that the proper endianness is set so
  *    that the bytes are transmitted in the right order for a task frame.
  * @sci_req: This parameter specifies the task request object being
  *    constructed.

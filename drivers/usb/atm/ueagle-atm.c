@@ -852,7 +852,7 @@ static int check_dsp_e4(const u8 *dsp, int len)
 			if (l > len)
 				return 1;
 
-		/* zero is zero regardless endianes */
+		/* zero is zero regardless endianness */
 		} while (blockidx->NotLastBlock);
 	}
 

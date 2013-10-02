@@ -228,7 +228,7 @@ struct pdc_pat_pd_addr_map_entry {
 * ----------------------------------------------------------
 * Bit  0 to 51 - conf_base_addr
 * Bit 52 to 62 - reserved
-* Bit       63 - endianess bit
+* Bit       63 - endianness bit
 ********************************************************************/
 #define PAT_GET_CBA(value) ((value) & 0xfffffffffffff000UL)
 

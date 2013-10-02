@@ -559,7 +559,7 @@ error_ack_short:
  *
  * @ack: buffer where to place the acknowledgement. If it is a regular
  *     command response, all fields will be returned with the right,
- *     native endianess.
+ *     native endianness.
  *
  *     You *cannot* use i2400m->bm_ack_buf for this buffer.
  *

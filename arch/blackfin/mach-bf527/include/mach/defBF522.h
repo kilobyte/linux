@@ -1217,7 +1217,7 @@
 
 #define                   HOST_CNTR_HOST_EN  0x1        /* Host Enable */
 #define                  HOST_CNTR_nHOST_EN  0x0
-#define                  HOST_CNTR_HOST_END  0x2        /* Host Endianess */
+#define                  HOST_CNTR_HOST_END  0x2        /* Host Endianness */
 #define                 HOST_CNTR_nHOST_END  0x0
 #define                 HOST_CNTR_DATA_SIZE  0x4        /* Data Size */
 #define                HOST_CNTR_nDATA_SIZE  0x0

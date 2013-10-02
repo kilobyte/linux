@@ -79,7 +79,7 @@
 #define BITFIELD5(b1, b2, b3, b4, b5)            b5; b4; b3; b2; b1;
 #define BITFIELD6(b1, b2, b3, b4, b5, b6)    b6; b5; b4; b3; b2; b1;
 #else
-#error unknown bitfield endianess
+#error unknown bitfield endianness
 #endif
 
  
@@ -926,7 +926,7 @@ typedef struct fore200e_vcc {
 
 #define PCA200E_PCI_LATENCY      0x40    /* maximum slave latenty            */
 #define PCA200E_PCI_MASTER_CTRL  0x41    /* master control                   */
-#define PCA200E_PCI_THRESHOLD    0x42    /* burst / continuous req threshold  */
+#define PCA200E_PCI_THRESHOLD    0x42    /* burst / continuous req threshol  */
 
 /* PBI master control register */
 
@@ -936,7 +936,7 @@ typedef struct fore200e_vcc {
 #define PCA200E_CTRL_IGN_LAT_TIMER     (1<<3)    /* ignore the latency timer                         */
 #define PCA200E_CTRL_ENA_CONT_REQ_MODE (1<<4)    /* enable continuous request mode                   */
 #define PCA200E_CTRL_LARGE_PCI_BURSTS  (1<<5)    /* force large PCI bus bursts                       */
-#define PCA200E_CTRL_CONVERT_ENDIAN    (1<<6)    /* convert endianess of slave RAM accesses          */
+#define PCA200E_CTRL_CONVERT_ENDIAN    (1<<6)    /* convert endianness of slave RAM accesses         */
 
 
 

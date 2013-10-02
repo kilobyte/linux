@@ -1093,7 +1093,7 @@ static int he_start(struct atm_dev *dev)
 	he_dev->atm_dev->link_rate = he_is622(he_dev) ?
 						ATM_OC12_PCR : ATM_OC3_PCR;
 
-	/* 4.6 set host endianess */
+	/* 4.6 set host endianness */
 	lb_swap = he_readl(he_dev, LB_SWAP);
 	if (he_is622(he_dev))
 		lb_swap &= ~XFER_SIZE;		/* 4 cells */

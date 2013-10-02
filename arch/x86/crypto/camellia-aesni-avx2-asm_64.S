@@ -640,7 +640,7 @@ ENDPROC(roundsm32_x4_x5_x6_x7_x0_x1_x2_x3_y4_y5_y6_y7_y0_y1_y2_y3_ab)
  *   swap_bitendianness(
  *       isom_map_camellia_to_aes(
  *           camellia_f(
- *               swap_bitendianess(in)
+ *               swap_bitendianness(in)
  *           )
  *       )
  *   )
@@ -661,7 +661,7 @@ ENDPROC(roundsm32_x4_x5_x6_x7_x0_x1_x2_x3_y4_y5_y6_y7_y0_y1_y2_y3_ab)
  *   swap_bitendianness(
  *       isom_map_camellia_to_aes(
  *           camellia_f(
- *               swap_bitendianess(in <<< 1)
+ *               swap_bitendianness(in <<< 1)
  *           )
  *       )
  *   )

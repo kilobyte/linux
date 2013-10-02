@@ -409,7 +409,7 @@ fore200e_shutdown(struct fore200e* fore200e)
 static u32 fore200e_pca_read(volatile u32 __iomem *addr)
 {
     /* on big-endian hosts, the board is configured to convert
-       the endianess of slave RAM accesses  */
+       the endianness of slave RAM accesses  */
     return le32_to_cpu(readl(addr));
 }
 
@@ -417,7 +417,7 @@ static u32 fore200e_pca_read(volatile u32 __iomem *addr)
 static void fore200e_pca_write(u32 val, volatile u32 __iomem *addr)
 {
     /* on big-endian hosts, the board is configured to convert
-       the endianess of slave RAM accesses  */
+       the endianness of slave RAM accesses  */
     writel(cpu_to_le32(val), addr);
 }
 
@@ -576,7 +576,7 @@ static int fore200e_pca_configure(struct fore200e *fore200e)
 
     master_ctrl = master_ctrl
 #if defined(__BIG_ENDIAN)
-	/* request the PCA board to convert the endianess of slave RAM accesses */
+	/* request the PCA board to convert the endianness of slave RAM accesses */
 	| PCA200E_CTRL_CONVERT_ENDIAN
 #endif
 #if 0

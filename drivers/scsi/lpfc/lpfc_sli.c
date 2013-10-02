@@ -7920,7 +7920,7 @@ __lpfc_sli_issue_iocb_s3(struct lpfc_hba *phba, uint32_t ring_number,
  * If the IOCB contains a BPL then the list of BDE's is
  * converted to sli4_sge's. If the IOCB contains a single
  * BDE then it is converted to a single sli_sge.
- * The IOCB is still in cpu endianess so the contents of
+ * The IOCB is still in cpu endianness so the contents of
  * the bpl can be used without byte swapping.
  *
  * Returns valid XRI = Success, NO_XRI = Failure.

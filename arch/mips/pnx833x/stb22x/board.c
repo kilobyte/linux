@@ -28,7 +28,7 @@
 #include <pnx833x.h>
 #include <gpio.h>
 
-/* endianess twiddlers */
+/* endianness twiddlers */
 #define PNX8335_DEBUG0 0x4400
 #define PNX8335_DEBUG1 0x4404
 #define PNX8335_DEBUG2 0x4408

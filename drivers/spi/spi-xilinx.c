@@ -390,7 +390,7 @@ static int xilinx_spi_probe(struct platform_device *pdev)
 	master->dev.of_node = pdev->dev.of_node;
 
 	/*
-	 * Detect endianess on the IP via loop bit in CR. Detection
+	 * Detect endianness on the IP via loop bit in CR. Detection
 	 * must be done before reset is sent because incorrect reset
 	 * value generates error interrupt.
 	 * Setup little endian helper functions first and try to use them

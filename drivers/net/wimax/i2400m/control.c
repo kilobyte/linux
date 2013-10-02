@@ -1188,7 +1188,7 @@ error_alloc:
  * @args: array of pointers to the TLV headers to send for
  *     configuration (each followed by its payload).
  *     TLV headers and payloads must be properly initialized, with the
- *     right endianess (LE).
+ *     right endianness (LE).
  * @arg_size: number of pointers in the @args array
  */
 static int i2400m_set_init_config(struct i2400m *i2400m,
