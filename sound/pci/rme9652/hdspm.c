@@ -1135,7 +1135,7 @@ static bool hdspm_is_raydat_or_aio(struct hdspm *hdspm)
 }
 
 
-/* Write/read to/from HDSPM with Adresses in Bytes
+/* Write/read to/from HDSPM with addresses in bytes
    not words but only 32Bit writes are allowed */
 
 static inline void hdspm_write(struct hdspm * hdspm, unsigned int reg,

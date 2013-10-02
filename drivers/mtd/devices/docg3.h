@@ -36,7 +36,7 @@
 #define DOC_IOSPACE_SIZE		0x2000
 
 /*
- * DOC G3 layout and adressing scheme
+ * DOC G3 layout and addressing scheme
  *   A page address for the block "b", plane "P" and page "p":
  *   address = [bbbb bPpp pppp]
  */

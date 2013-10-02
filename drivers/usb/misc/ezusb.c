@@ -20,12 +20,12 @@
 struct ezusb_fx_type {
 	/* EZ-USB Control and Status Register.  Bit 0 controls 8051 reset */
 	unsigned short cpucs_reg;
-	unsigned short max_internal_adress;
+	unsigned short max_internal_address;
 };
 
 static struct ezusb_fx_type ezusb_fx1 = {
 	.cpucs_reg = 0x7F92,
-	.max_internal_adress = 0x1B3F,
+	.max_internal_address = 0x1B3F,
 };
 
 /* Commands for writing to memory */
@@ -93,7 +93,7 @@ static int ezusb_ihex_firmware_download(struct usb_device *dev,
 
 	record = (const struct ihex_binrec *)firmware->data;
 	for (; record; record = ihex_next_binrec(record)) {
-		if (be32_to_cpu(record->addr) > fx.max_internal_adress) {
+		if (be32_to_cpu(record->addr) > fx.max_internal_address) {
 			ret = ezusb_writememory(dev, be32_to_cpu(record->addr),
 						(unsigned char *)record->data,
 						be16_to_cpu(record->len), WRITE_EXT_RAM);
@@ -113,7 +113,7 @@ static int ezusb_ihex_firmware_download(struct usb_device *dev,
 		goto out;
 	record = (const struct ihex_binrec *)firmware->data;
 	for (; record; record = ihex_next_binrec(record)) {
-		if (be32_to_cpu(record->addr) <= fx.max_internal_adress) {
+		if (be32_to_cpu(record->addr) <= fx.max_internal_address) {
 			ret = ezusb_writememory(dev, be32_to_cpu(record->addr),
 						(unsigned char *)record->data,
 						be16_to_cpu(record->len), WRITE_INT_RAM);
@@ -147,7 +147,7 @@ EXPORT_SYMBOL_GPL(ezusb_fx1_ihex_firmware_download);
  */
 static struct ezusb_fx_type ezusb_fx2 = {
 	.cpucs_reg = 0xE600,
-	.max_internal_adress = 0x3FFF,
+	.max_internal_address = 0x3FFF,
 };
 
 int ezusb_fx2_set_reset(struct usb_device *dev, unsigned char reset_bit)

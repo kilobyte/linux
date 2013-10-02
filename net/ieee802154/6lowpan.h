@@ -88,7 +88,7 @@
 
 /*
  * check whether we can compress the IID to 16 bits,
- * it's possible for unicast adresses with first 49 bits are zero only.
+ * it's possible for unicast addresses with first 49 bits are zero only.
  */
 #define lowpan_is_iid_16_bit_compressable(a)	\
 	((((a)->s6_addr16[4]) == 0) &&		\

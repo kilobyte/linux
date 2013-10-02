@@ -1167,7 +1167,7 @@ disable:
  *
  * unregister video device
  * free interrupt
- * unmap ioadresses
+ * unmap ioaddresses
  * free memory
  * free GPIO pins
  */

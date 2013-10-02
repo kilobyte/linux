@@ -598,7 +598,7 @@ static bool data_ok(struct brcmf_sdio *bus)
 
 /*
  * Reads a register in the SDIO hardware block. This block occupies a series of
- * adresses on the 32 bit backplane bus.
+ * addresses on the 32 bit backplane bus.
  */
 static int
 r_sdreg32(struct brcmf_sdio *bus, u32 *regvar, u32 offset)

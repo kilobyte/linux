@@ -50,7 +50,7 @@
  *        [0xABCDEF98] shift=12 mask=0xFFF value=0x123 => [0xAB123F98]
  *
  * Usage:
- * # echo "CMD [OPTIONS] BANK ADRESS [VALUE]" > $debugfs/ab8500/hwreg
+ * # echo "CMD [OPTIONS] BANK ADDRESS [VALUE]" > $debugfs/ab8500/hwreg
  *
  * CMD      read      read access
  *          write     write access

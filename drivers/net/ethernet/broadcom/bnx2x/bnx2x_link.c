@@ -817,62 +817,62 @@ static int bnx2x_ets_e3b0_set_cos_bw(struct bnx2x *bp,
 				     const u8 bw,
 				     const u8 port)
 {
-	u32 nig_reg_adress_crd_weight = 0;
-	u32 pbf_reg_adress_crd_weight = 0;
+	u32 nig_reg_address_crd_weight = 0;
+	u32 pbf_reg_address_crd_weight = 0;
 	/* Calculate and set BW for this COS - use 1 instead of 0 for BW */
 	const u32 cos_bw_nig = ((bw ? bw : 1) * min_w_val_nig) / total_bw;
 	const u32 cos_bw_pbf = ((bw ? bw : 1) * min_w_val_pbf) / total_bw;
 
 	switch (cos_entry) {
 	case 0:
-	    nig_reg_adress_crd_weight =
+	    nig_reg_address_crd_weight =
 		 (port) ? NIG_REG_P1_TX_ARB_CREDIT_WEIGHT_0 :
 		     NIG_REG_P0_TX_ARB_CREDIT_WEIGHT_0;
-	     pbf_reg_adress_crd_weight = (port) ?
+	     pbf_reg_address_crd_weight = (port) ?
 		 PBF_REG_COS0_WEIGHT_P1 : PBF_REG_COS0_WEIGHT_P0;
 	     break;
 	case 1:
-	     nig_reg_adress_crd_weight = (port) ?
+	     nig_reg_address_crd_weight = (port) ?
 		 NIG_REG_P1_TX_ARB_CREDIT_WEIGHT_1 :
 		 NIG_REG_P0_TX_ARB_CREDIT_WEIGHT_1;
-	     pbf_reg_adress_crd_weight = (port) ?
+	     pbf_reg_address_crd_weight = (port) ?
 		 PBF_REG_COS1_WEIGHT_P1 : PBF_REG_COS1_WEIGHT_P0;
 	     break;
 	case 2:
-	     nig_reg_adress_crd_weight = (port) ?
+	     nig_reg_address_crd_weight = (port) ?
 		 NIG_REG_P1_TX_ARB_CREDIT_WEIGHT_2 :
 		 NIG_REG_P0_TX_ARB_CREDIT_WEIGHT_2;
 
-		 pbf_reg_adress_crd_weight = (port) ?
+		 pbf_reg_address_crd_weight = (port) ?
 		     PBF_REG_COS2_WEIGHT_P1 : PBF_REG_COS2_WEIGHT_P0;
 	     break;
 	case 3:
 	    if (port)
 			return -EINVAL;
-	     nig_reg_adress_crd_weight =
+	     nig_reg_address_crd_weight =
 		 NIG_REG_P0_TX_ARB_CREDIT_WEIGHT_3;
-	     pbf_reg_adress_crd_weight =
+	     pbf_reg_address_crd_weight =
 		 PBF_REG_COS3_WEIGHT_P0;
 	     break;
 	case 4:
 	    if (port)
 		return -EINVAL;
-	     nig_reg_adress_crd_weight =
+	     nig_reg_address_crd_weight =
 		 NIG_REG_P0_TX_ARB_CREDIT_WEIGHT_4;
-	     pbf_reg_adress_crd_weight = PBF_REG_COS4_WEIGHT_P0;
+	     pbf_reg_address_crd_weight = PBF_REG_COS4_WEIGHT_P0;
 	     break;
 	case 5:
 	    if (port)
 		return -EINVAL;
-	     nig_reg_adress_crd_weight =
+	     nig_reg_address_crd_weight =
 		 NIG_REG_P0_TX_ARB_CREDIT_WEIGHT_5;
-	     pbf_reg_adress_crd_weight = PBF_REG_COS5_WEIGHT_P0;
+	     pbf_reg_address_crd_weight = PBF_REG_COS5_WEIGHT_P0;
 	     break;
 	}
 
-	REG_WR(bp, nig_reg_adress_crd_weight, cos_bw_nig);
+	REG_WR(bp, nig_reg_address_crd_weight, cos_bw_nig);
 
-	REG_WR(bp, pbf_reg_adress_crd_weight, cos_bw_pbf);
+	REG_WR(bp, pbf_reg_address_crd_weight, cos_bw_pbf);
 
 	return 0;
 }
