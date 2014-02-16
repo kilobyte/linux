@@ -311,11 +311,11 @@ int bench_sched_messaging(int argc, const char **argv,
 		       num_groups, num_groups * 2 * num_fds,
 		       thread_mode ? "threads" : "processes");
 		printf(" %14s: %lu.%03lu [sec]\n", "Total time",
-		       diff.tv_sec,
+		       (unsigned long) diff.tv_sec,
 		       (unsigned long) (diff.tv_usec/1000));
 		break;
 	case BENCH_FORMAT_SIMPLE:
-		printf("%lu.%03lu\n", diff.tv_sec,
+		printf("%lu.%03lu\n", (unsigned long) diff.tv_sec,
 		       (unsigned long) (diff.tv_usec/1000));
 		break;
 	default:

@@ -566,7 +566,7 @@ static void show_timeofday(void)
 	gettimeofday(&tv, NULL);
 	if (localtime_r(&tv.tv_sec, &ltime)) {
 		strftime(date, sizeof(date), "%H:%M:%S", &ltime);
-		pr_info("%s.%06ld", date, tv.tv_usec);
+		pr_info("%s.%06ld", date, (long int) tv.tv_usec);
 	} else
 		pr_info("00:00:00.000000");
 

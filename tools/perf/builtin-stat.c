@@ -555,7 +555,8 @@ static void print_interval(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	diff_timespec(&rs, &ts, &ref_time);
-	sprintf(prefix, "%6lu.%09lu%s", rs.tv_sec, rs.tv_nsec, csv_sep);
+	sprintf(prefix, "%6lu.%09lu%s", (unsigned long) rs.tv_sec,
+	                                (unsigned long) rs.tv_nsec, csv_sep);
 
 	if (num_print_interval == 0 && !csv_output) {
 		switch (aggr_mode) {
