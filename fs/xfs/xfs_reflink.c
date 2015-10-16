@@ -1740,3 +1740,45 @@ out:
 	trace_xfs_reflink_unshare_error(ip, error, _RET_IP_);
 	return error;
 }
+
+/*
+ * If we're trying to truncate a file whose last block is shared and the new
+ * size isn't aligned to a block boundary, we need to dirty that last block
+ * ahead of the VFS zeroing the page.
+ */
+int
+xfs_reflink_cow_eof_block(
+	struct xfs_inode	*ip,
+	xfs_off_t		newsize)
+{
+	struct xfs_mount	*mp = ip->i_mount;
+	xfs_fileoff_t		fbno;
+	xfs_off_t		isize;
+	int			error;
+
+	if (!xfs_is_reflink_inode(ip) ||
+	    (newsize & ((1 << VFS_I(ip)->i_blkbits) - 1)) == 0)
+		return 0;
+
+	/* Try to CoW the shared last block */
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	fbno = XFS_B_TO_FSBT(mp, newsize);
+	isize = i_size_read(VFS_I(ip));
+
+	if (newsize > isize)
+		trace_xfs_reflink_cow_eof_block(ip, isize, newsize - isize);
+	else
+		trace_xfs_reflink_cow_eof_block(ip, newsize, isize - newsize);
+
+	error = xfs_reflink_dirty_extents(ip, fbno, fbno + 1, isize);
+	if (error)
+		goto out_unlock;
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+
+	return 0;
+
+out_unlock:
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	trace_xfs_reflink_cow_eof_block_error(ip, error, _RET_IP_);
+	return error;
+}

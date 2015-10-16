@@ -38,6 +38,7 @@
 #include "xfs_dir2.h"
 #include "xfs_trans_space.h"
 #include "xfs_pnfs.h"
+#include "xfs_reflink.h"
 
 #include <linux/capability.h>
 #include <linux/xattr.h>
@@ -814,6 +815,14 @@ xfs_setattr_size(
 		if (error)
 			return error;
 	}
+
+	/*
+	 * CoW the EOF block of the file if it's necessary to avoid
+	 * corrupting other files.
+	 */
+	error = xfs_reflink_cow_eof_block(ip, newsize);
+	if (error)
+		return error;
 
 	/*
 	 * We are going to log the inode size change in this transaction so
