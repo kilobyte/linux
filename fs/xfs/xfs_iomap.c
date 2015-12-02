@@ -560,12 +560,13 @@ check_writeio:
 	return alloc_blocks;
 }
 
-int
-xfs_iomap_write_delay(
+STATIC int
+__xfs_iomap_write_delay(
 	xfs_inode_t	*ip,
 	xfs_off_t	offset,
 	size_t		count,
-	xfs_bmbt_irec_t *ret_imap)
+	xfs_bmbt_irec_t *ret_imap,
+	int		whichfork)
 {
 	xfs_mount_t	*mp = ip->i_mount;
 	xfs_fileoff_t	offset_fsb;
@@ -591,10 +592,14 @@ xfs_iomap_write_delay(
 	extsz = xfs_get_extsz_hint(ip);
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 
-	error = xfs_iomap_eof_want_preallocate(mp, ip, offset, count,
-				imap, XFS_WRITE_IMAPS, &prealloc);
-	if (error)
-		return error;
+	if (whichfork == XFS_DATA_FORK) {
+		error = xfs_iomap_eof_want_preallocate(mp, ip, offset, count,
+					imap, XFS_WRITE_IMAPS, &prealloc);
+		if (error)
+			return error;
+	} else {
+		prealloc = 0;
+	}
 
 retry:
 	if (prealloc) {
@@ -626,8 +631,8 @@ retry:
 	ASSERT(last_fsb > offset_fsb);
 
 	nimaps = XFS_WRITE_IMAPS;
-	error = xfs_bmapi_delay(ip, offset_fsb, last_fsb - offset_fsb,
-				imap, &nimaps, XFS_BMAPI_ENTIRE);
+	error = xfs_bmapi_delay(ip, whichfork, offset_fsb,
+			last_fsb - offset_fsb, imap, &nimaps, XFS_BMAPI_ENTIRE);
 	switch (error) {
 	case 0:
 	case -ENOSPC:
@@ -663,6 +668,31 @@ retry:
 
 	*ret_imap = imap[0];
 	return 0;
+}
+
+int
+xfs_iomap_write_delay(
+	xfs_inode_t	*ip,
+	xfs_off_t	offset,
+	size_t		count,
+	xfs_bmbt_irec_t *ret_imap)
+{
+	return __xfs_iomap_write_delay(ip, offset, count, ret_imap,
+				       XFS_DATA_FORK);
+}
+
+int
+xfs_iomap_cow_delay(
+	xfs_inode_t	*ip,
+	xfs_off_t	offset,
+	size_t		count,
+	xfs_bmbt_irec_t *ret_imap)
+{
+	ASSERT(XFS_IFORK_PTR(ip, XFS_COW_FORK) != NULL);
+	trace_xfs_iomap_cow_delay(ip, offset, count);
+
+	return __xfs_iomap_write_delay(ip, offset, count, ret_imap,
+				       XFS_COW_FORK);
 }
 
 /*
