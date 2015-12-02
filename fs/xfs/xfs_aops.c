@@ -312,9 +312,14 @@ xfs_map_blocks(
 	int			error = 0;
 	int			bmapi_flags = XFS_BMAPI_ENTIRE;
 	int			nimaps = 1;
+	int			whichfork;
+	bool			need_alloc;
 
 	if (XFS_FORCED_SHUTDOWN(mp))
 		return -EIO;
+
+	whichfork = (type == XFS_IO_COW ? XFS_COW_FORK : XFS_DATA_FORK);
+	need_alloc = (type == XFS_IO_DELALLOC);
 
 	if (type == XFS_IO_UNWRITTEN)
 		bmapi_flags |= XFS_BMAPI_IGSTATE;
@@ -328,16 +333,29 @@ xfs_map_blocks(
 		count = mp->m_super->s_maxbytes - offset;
 	end_fsb = XFS_B_TO_FSB(mp, (xfs_ufsize_t)offset + count);
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
-	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
-				imap, &nimaps, bmapi_flags);
+
+	if (type == XFS_IO_COW)
+		error = xfs_reflink_find_cow_mapping(ip, offset, imap,
+						     &need_alloc);
+	else {
+		error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
+				       imap, &nimaps, bmapi_flags);
+		/*
+		 * Truncate an overwrite extent if there's a pending CoW
+		 * reservation before the end of this extent.  This forces us
+		 * to come back to writepage to take care of the CoW.
+		 */
+		if (nimaps && type == XFS_IO_OVERWRITE)
+			xfs_reflink_trim_irec_to_next_cow(ip, offset_fsb, imap);
+	}
 	xfs_iunlock(ip, XFS_ILOCK_SHARED);
 
 	if (error)
 		return error;
 
-	if (type == XFS_IO_DELALLOC &&
+	if (need_alloc &&
 	    (!nimaps || isnullstartblock(imap->br_startblock))) {
-		error = xfs_iomap_write_allocate(ip, XFS_DATA_FORK, offset,
+		error = xfs_iomap_write_allocate(ip, whichfork, offset,
 				imap);
 		if (!error)
 			trace_xfs_map_blocks_alloc(ip, offset, count, type,
@@ -625,7 +643,8 @@ xfs_check_page_type(
 			if (type == XFS_IO_DELALLOC)
 				return true;
 		} else if (buffer_dirty(bh) && buffer_mapped(bh)) {
-			if (type == XFS_IO_OVERWRITE)
+			if (type == XFS_IO_OVERWRITE ||
+			    type == XFS_IO_COW)
 				return true;
 		}
 
@@ -635,6 +654,26 @@ xfs_check_page_type(
 	} while ((bh = bh->b_this_page) != head);
 
 	return false;
+}
+
+/*
+ * Figure out if CoW is pending at this offset.
+ */
+static bool
+xfs_is_cow_io(
+	struct xfs_inode	*ip,
+	xfs_off_t		offset)
+{
+	bool			is_cow;
+
+	if (!xfs_sb_version_hasreflink(&ip->i_mount->m_sb))
+		return false;
+
+	xfs_ilock(ip, XFS_ILOCK_SHARED);
+	is_cow = xfs_reflink_is_cow_pending(ip, offset);
+	xfs_iunlock(ip, XFS_ILOCK_SHARED);
+
+	return is_cow;
 }
 
 STATIC void
@@ -745,6 +784,7 @@ xfs_writepage_map(
 	int			error = 0;
 	int			count = 0;
 	int			uptodate = 1;
+	unsigned int		new_type;
 
 	bh = head = page_buffers(page);
 	offset = page_offset(page);
@@ -776,8 +816,11 @@ xfs_writepage_map(
 				wpc->imap_valid = false;
 			}
 		} else if (buffer_uptodate(bh)) {
-			if (wpc->io_type != XFS_IO_OVERWRITE) {
-				wpc->io_type = XFS_IO_OVERWRITE;
+			new_type = xfs_is_cow_io(XFS_I(inode), offset) ?
+					XFS_IO_COW : XFS_IO_OVERWRITE;
+
+			if (wpc->io_type != new_type) {
+				wpc->io_type = new_type;
 				wpc->imap_valid = false;
 			}
 		} else {
