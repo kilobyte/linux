@@ -1,0 +1,230 @@
+#
+# Linux VServer configuration
+#
+
+menu "Linux VServer"
+
+config	VSERVER_AUTO_LBACK
+	bool    "Automatically Assign Loopback IP"
+	default y
+	help
+	  Automatically assign a guest specific loopback
+	  IP and add it to the kernel network stack on
+	  startup.
+
+config	VSERVER_AUTO_SINGLE
+	bool	"Automatic Single IP Special Casing"
+	default n
+	help
+	  This allows network contexts with a single IP to
+	  automatically remap 0.0.0.0 bindings to that IP,
+	  avoiding further network checks and improving
+	  performance.
+
+	  (note: such guests do not allow to change the ip
+	   on the fly and do not show loopback addresses)
+
+config	VSERVER_COWBL
+	bool	"Enable COW Immutable Link Breaking"
+	default y
+	help
+	  This enables the COW (Copy-On-Write) link break code.
+	  It allows you to treat unified files like normal files
+	  when writing to them (which will implicitely break the
+	  link and create a copy of the unified file)
+
+config	VSERVER_VTIME
+	bool	"Enable Virtualized Guest Time (EXPERIMENTAL)"
+	default n
+	help
+	  This enables per guest time offsets to allow for
+	  adjusting the system clock individually per guest.
+	  this adds some overhead to the time functions and
+	  therefore should not be enabled without good reason.
+
+config	VSERVER_DEVICE
+	bool	"Enable Guest Device Mapping (EXPERIMENTAL)"
+	default n
+	help
+	  This enables generic device remapping.
+
+config	VSERVER_PROC_SECURE
+	bool	"Enable Proc Security"
+	depends on PROC_FS
+	default y
+	help
+	  This configures ProcFS security to initially hide
+	  non-process entries for all contexts except the main and
+	  spectator context (i.e. for all guests), which is a secure
+	  default.
+
+	  (note: on 1.2x the entries were visible by default)
+
+choice
+	prompt	"Persistent Inode Tagging"
+	default	TAGGING_ID24
+	help
+	  This adds persistent context information to filesystems
+	  mounted with the tagxid option. Tagging is a requirement
+	  for per-context disk limits and per-context quota.
+
+
+config	TAGGING_NONE
+	bool	"Disabled"
+	help
+	  do not store per-context information in inodes.
+
+config	TAGGING_UID16
+	bool	"UID16/GID32"
+	help
+	  reduces UID to 16 bit, but leaves GID at 32 bit.
+
+config	TAGGING_GID16
+	bool	"UID32/GID16"
+	help
+	  reduces GID to 16 bit, but leaves UID at 32 bit.
+
+config	TAGGING_ID24
+	bool	"UID24/GID24"
+	help
+	  uses the upper 8bit from UID and GID for XID tagging
+	  which leaves 24bit for UID/GID each, which should be
+	  more than sufficient for normal use.
+
+config	TAGGING_INTERN
+	bool	"UID32/GID32"
+	help
+	  this uses otherwise reserved inode fields in the on
+	  disk representation, which limits the use to a few
+	  filesystems (currently ext2 and ext3)
+
+endchoice
+
+config	TAG_NFSD
+	bool	"Tag NFSD User Auth and Files"
+	default n
+	help
+	  Enable this if you do want the in-kernel NFS
+	  Server to use the tagging specified above.
+	  (will require patched clients too)
+
+config	VSERVER_PRIVACY
+	bool	"Honor Privacy Aspects of Guests"
+	default n
+	help
+	  When enabled, most context checks will disallow
+	  access to structures assigned to a specific context,
+	  like ptys or loop devices.
+
+config	VSERVER_CONTEXTS
+	int	"Maximum number of Contexts (1-65533)"	if EMBEDDED
+	range 1 65533
+	default "768"	if 64BIT
+	default "256"
+	help
+	  This setting will optimize certain data structures
+	  and memory allocations according to the expected
+	  maximum.
+
+	  note: this is not a strict upper limit.
+
+config	VSERVER_WARN
+	bool	"VServer Warnings"
+	default y
+	help
+	  This enables various runtime warnings, which will
+	  notify about potential manipulation attempts or
+	  resource shortage. It is generally considered to
+	  be a good idea to have that enabled.
+
+config	VSERVER_WARN_DEVPTS
+	bool	"VServer DevPTS Warnings"
+	depends on VSERVER_WARN
+	default y
+	help
+	  This enables DevPTS related warnings, issued when a
+	  process inside a context tries to lookup or access
+	  a dynamic pts from the host or a different context.
+
+config	VSERVER_DEBUG
+	bool	"VServer Debugging Code"
+	default n
+	help
+	  Set this to yes if you want to be able to activate
+	  debugging output at runtime. It adds a very small
+	  overhead to all vserver related functions and
+	  increases the kernel size by about 20k.
+
+config	VSERVER_HISTORY
+	bool	"VServer History Tracing"
+	depends on VSERVER_DEBUG
+	default n
+	help
+	  Set this to yes if you want to record the history of
+	  linux-vserver activities, so they can be replayed in
+	  the event of a kernel panic or oops.
+
+config	VSERVER_HISTORY_SIZE
+	int	"Per-CPU History Size (32-65536)"
+	depends on VSERVER_HISTORY
+	range 32 65536
+	default 64
+	help
+	  This allows you to specify the number of entries in
+	  the per-CPU history buffer.
+
+config	VSERVER_EXTRA_MNT_CHECK
+	bool	"Extra Checks for Reachability"
+	default n
+	help
+	  Set this to yes if you want to do extra checks for
+	  vfsmount reachability in the proc filesystem code.
+	  This shouldn't be required on any setup utilizing
+	  mnt namespaces.
+
+choice
+	prompt	"Quotes used in debug and warn messages"
+	default	QUOTES_ISO8859
+
+config	QUOTES_ISO8859
+	bool	"Extended ASCII (ISO 8859) angle quotes"
+	help
+	  This uses the extended ASCII characters \xbb
+	  and \xab for quoting file and process names.
+
+config	QUOTES_UTF8
+	bool	"UTF-8 angle quotes"
+	help
+	  This uses the the UTF-8 sequences for angle
+	  quotes to quote file and process names.
+
+config	QUOTES_ASCII
+	bool	"ASCII single quotes"
+	help
+	  This uses the ASCII single quote character
+	  (\x27) to quote file and process names.
+
+endchoice
+
+endmenu
+
+
+config	VSERVER
+	bool
+	default y
+	select NAMESPACES
+	select UTS_NS
+	select IPC_NS
+#	select USER_NS
+	select SYSVIPC
+
+config	VSERVER_SECURITY
+	bool
+	depends on SECURITY
+	default y
+	select SECURITY_CAPABILITIES
+
+config	VSERVER_DISABLED
+	bool
+	default n
+

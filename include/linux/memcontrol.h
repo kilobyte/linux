@@ -99,6 +99,13 @@ extern struct mem_cgroup *try_get_mem_cgroup_from_mm(struct mm_struct *mm);
 extern struct mem_cgroup *parent_mem_cgroup(struct mem_cgroup *memcg);
 extern struct mem_cgroup *mem_cgroup_from_css(struct cgroup_subsys_state *css);
 
+extern u64 mem_cgroup_res_read_u64(struct mem_cgroup *mem, int member);
+extern u64 mem_cgroup_memsw_read_u64(struct mem_cgroup *mem, int member);
+
+extern s64 mem_cgroup_stat_read_cache(struct mem_cgroup *mem);
+extern s64 mem_cgroup_stat_read_anon(struct mem_cgroup *mem);
+extern s64 mem_cgroup_stat_read_mapped(struct mem_cgroup *mem);
+
 static inline
 bool mm_match_cgroup(const struct mm_struct *mm, const struct mem_cgroup *memcg)
 {

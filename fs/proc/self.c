@@ -2,6 +2,7 @@
 #include <linux/namei.h>
 #include <linux/slab.h>
 #include <linux/pid_namespace.h>
+#include <linux/vserver/inode.h>
 #include "internal.h"
 
 /*
@@ -54,6 +55,8 @@ int proc_setup_self(struct super_block *s)
 	self = d_alloc_name(s->s_root, "self");
 	if (self) {
 		struct inode *inode = new_inode_pseudo(s);
+
+		// self->vx_flags = IATTR_PROC_SYMLINK;
 		if (inode) {
 			inode->i_ino = self_inum;
 			inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;

@@ -22,6 +22,7 @@
 #include <linux/ctype.h>
 #include <linux/quotaops.h>
 #include <linux/exportfs.h>
+#include <linux/vs_tag.h>
 #include "jfs_incore.h"
 #include "jfs_superblock.h"
 #include "jfs_inode.h"
@@ -1461,6 +1462,7 @@ static struct dentry *jfs_lookup(struct inode *dip, struct dentry *dentry, unsig
 			jfs_err("jfs_lookup: iget failed on inum %d", (uint)inum);
 	}
 
+	dx_propagate_tag(nd, ip);
 	return d_splice_alias(ip, dentry);
 }
 
@@ -1526,6 +1528,7 @@ const struct inode_operations jfs_dir_inode_operations = {
 	.get_acl	= jfs_get_acl,
 	.set_acl	= jfs_set_acl,
 #endif
+	.sync_flags	= jfs_sync_flags,
 };
 
 const struct file_operations jfs_dir_operations = {

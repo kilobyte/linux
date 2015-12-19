@@ -2386,6 +2386,9 @@ int open_ctree(struct super_block *sb,
 		goto fail_alloc;
 	}
 
+	if (btrfs_test_opt(tree_root, TAGGED))
+		sb->s_flags |= MS_TAGGED;
+
 	features = btrfs_super_incompat_flags(disk_super) &
 		~BTRFS_FEATURE_INCOMPAT_SUPP;
 	if (features) {

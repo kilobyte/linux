@@ -33,6 +33,8 @@
 #include <linux/uprobes.h>
 #include <linux/compat.h>
 #include <linux/cn_proc.h>
+#include <linux/vs_context.h>
+#include <linux/vs_pid.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/signal.h>
 
@@ -790,8 +792,17 @@ static int check_kill_permission(int sig, struct siginfo *info,
 	struct pid *sid;
 	int error;
 
+	vxdprintk(VXD_CBIT(misc, 7),
+		"check_kill_permission(%d,%p,%p[#%u,%u])",
+		sig, info, t, vx_task_xid(t), t->pid);
+
 	if (!valid_signal(sig))
 		return -EINVAL;
+
+/*	FIXME: needed? if so, why?
+	if ((info != SEND_SIG_NOINFO) &&
+		(is_si_special(info) || !si_fromuser(info)))
+		goto skip;	*/
 
 	if (!si_fromuser(info))
 		return 0;
@@ -816,6 +827,20 @@ static int check_kill_permission(int sig, struct siginfo *info,
 		}
 	}
 
+	error = -EPERM;
+	if (t->pid == 1 && current->xid)
+		return error;
+
+	error = -ESRCH;
+	/* FIXME: we shouldn't return ESRCH ever, to avoid
+		  loops, maybe ENOENT or EACCES? */
+	if (!vx_check(vx_task_xid(t), VS_WATCH_P | VS_IDENT)) {
+		vxdprintk(current->xid || VXD_CBIT(misc, 7),
+			"signal %d[%p] xid mismatch %p[#%u,%u] xid=#%u",
+			sig, info, t, vx_task_xid(t), t->pid, current->xid);
+		return error;
+	}
+/* skip: */
 	return security_task_kill(t, info, sig, 0);
 }
 
@@ -1353,7 +1378,7 @@ int kill_pid_info(int sig, struct siginfo *info, struct pid *pid)
 	rcu_read_lock();
 retry:
 	p = pid_task(pid, PIDTYPE_PID);
-	if (p) {
+	if (p && vx_check(vx_task_xid(p), VS_IDENT)) {
 		error = group_send_sig_info(sig, info, p);
 		if (unlikely(error == -ESRCH))
 			/*
@@ -1401,7 +1426,7 @@ int kill_pid_info_as_cred(int sig, struct siginfo *info, struct pid *pid,
 
 	rcu_read_lock();
 	p = pid_task(pid, PIDTYPE_PID);
-	if (!p) {
+	if (!p || !vx_check(vx_task_xid(p), VS_IDENT)) {
 		ret = -ESRCH;
 		goto out_unlock;
 	}
@@ -1453,8 +1478,10 @@ static int kill_something_info(int sig, struct siginfo *info, pid_t pid)
 		struct task_struct * p;
 
 		for_each_process(p) {
-			if (task_pid_vnr(p) > 1 &&
-					!same_thread_group(p, current)) {
+			if (vx_check(vx_task_xid(p), VS_ADMIN|VS_IDENT) &&
+				task_pid_vnr(p) > 1 &&
+				!same_thread_group(p, current) &&
+				!vx_current_initpid(p->pid)) {
 				int err = group_send_sig_info(sig, info, p);
 				++count;
 				if (err != -EPERM)
@@ -2306,6 +2333,11 @@ relock:
 		 */
 		if (unlikely(signal->flags & SIGNAL_UNKILLABLE) &&
 				!sig_kernel_only(signr))
+			continue;
+
+		/* virtual init is protected against user signals */
+		if ((info->si_code == SI_USER) &&
+			vx_current_initpid(current->pid))
 			continue;
 
 		if (sig_kernel_stop(signr)) {

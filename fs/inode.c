@@ -18,6 +18,7 @@
 #include <linux/buffer_head.h> /* for inode_has_buffers */
 #include <linux/ratelimit.h>
 #include <linux/list_lru.h>
+#include <linux/vs_tag.h>
 #include "internal.h"
 
 /*
@@ -129,6 +130,8 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	struct address_space *const mapping = &inode->i_data;
 
 	inode->i_sb = sb;
+
+	/* essential because of inode slab reuse */
 	inode->i_blkbits = sb->s_blocksize_bits;
 	inode->i_flags = 0;
 	atomic_set(&inode->i_count, 1);
@@ -138,6 +141,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_opflags = 0;
 	i_uid_write(inode, 0);
 	i_gid_write(inode, 0);
+	i_tag_write(inode, 0);
 	atomic_set(&inode->i_writecount, 0);
 	inode->i_size = 0;
 	inode->i_blocks = 0;
@@ -150,6 +154,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_bdev = NULL;
 	inode->i_cdev = NULL;
 	inode->i_rdev = 0;
+	inode->i_mdev = 0;
 	inode->dirtied_when = 0;
 
 	if (security_inode_alloc(inode))
@@ -476,6 +481,8 @@ void __insert_inode_hash(struct inode *inode, unsigned long hashval)
 	spin_unlock(&inode_hash_lock);
 }
 EXPORT_SYMBOL(__insert_inode_hash);
+
+EXPORT_SYMBOL_GPL(__iget);
 
 /**
  *	__remove_inode_hash - remove an inode from the hash
@@ -1802,9 +1809,11 @@ void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 	if (S_ISCHR(mode)) {
 		inode->i_fop = &def_chr_fops;
 		inode->i_rdev = rdev;
+		inode->i_mdev = rdev;
 	} else if (S_ISBLK(mode)) {
 		inode->i_fop = &def_blk_fops;
 		inode->i_rdev = rdev;
+		inode->i_mdev = rdev;
 	} else if (S_ISFIFO(mode))
 		inode->i_fop = &pipefifo_fops;
 	else if (S_ISSOCK(mode))
@@ -1833,6 +1842,7 @@ void inode_init_owner(struct inode *inode, const struct inode *dir,
 	} else
 		inode->i_gid = current_fsgid();
 	inode->i_mode = mode;
+	i_tag_write(inode, dx_current_fstag(inode->i_sb));
 }
 EXPORT_SYMBOL(inode_init_owner);
 

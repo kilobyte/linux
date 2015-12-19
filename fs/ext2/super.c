@@ -395,7 +395,8 @@ enum {
 	Opt_err_ro, Opt_nouid32, Opt_nocheck, Opt_debug,
 	Opt_oldalloc, Opt_orlov, Opt_nobh, Opt_user_xattr, Opt_nouser_xattr,
 	Opt_acl, Opt_noacl, Opt_xip, Opt_ignore, Opt_err, Opt_quota,
-	Opt_usrquota, Opt_grpquota, Opt_reservation, Opt_noreservation
+	Opt_usrquota, Opt_grpquota, Opt_reservation, Opt_noreservation,
+	Opt_tag, Opt_notag, Opt_tagid
 };
 
 static const match_table_t tokens = {
@@ -423,6 +424,9 @@ static const match_table_t tokens = {
 	{Opt_acl, "acl"},
 	{Opt_noacl, "noacl"},
 	{Opt_xip, "xip"},
+	{Opt_tag, "tag"},
+	{Opt_notag, "notag"},
+	{Opt_tagid, "tagid=%u"},
 	{Opt_grpquota, "grpquota"},
 	{Opt_ignore, "noquota"},
 	{Opt_quota, "quota"},
@@ -506,6 +510,20 @@ static int parse_options(char *options, struct super_block *sb)
 		case Opt_nouid32:
 			set_opt (sbi->s_mount_opt, NO_UID32);
 			break;
+#ifndef CONFIG_TAGGING_NONE
+		case Opt_tag:
+			set_opt (sbi->s_mount_opt, TAGGED);
+			break;
+		case Opt_notag:
+			clear_opt (sbi->s_mount_opt, TAGGED);
+			break;
+#endif
+#ifdef CONFIG_PROPAGATE
+		case Opt_tagid:
+			/* use args[0] */
+			set_opt (sbi->s_mount_opt, TAGGED);
+			break;
+#endif
 		case Opt_nocheck:
 			clear_opt (sbi->s_mount_opt, CHECK);
 			break;
@@ -864,6 +882,8 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 	if (!parse_options((char *) data, sb))
 		goto failed_mount;
 
+	if (EXT2_SB(sb)->s_mount_opt & EXT2_MOUNT_TAGGED)
+		sb->s_flags |= MS_TAGGED;
 	sb->s_flags = (sb->s_flags & ~MS_POSIXACL) |
 		((EXT2_SB(sb)->s_mount_opt & EXT2_MOUNT_POSIX_ACL) ?
 		 MS_POSIXACL : 0);
@@ -1266,6 +1286,14 @@ static int ext2_remount (struct super_block * sb, int * flags, char * data)
 	 * Allow the "check" option to be passed as a remount option.
 	 */
 	if (!parse_options(data, sb)) {
+		err = -EINVAL;
+		goto restore_opts;
+	}
+
+	if ((sbi->s_mount_opt & EXT2_MOUNT_TAGGED) &&
+		!(sb->s_flags & MS_TAGGED)) {
+		printk("EXT2-fs: %s: tagging not permitted on remount.\n",
+		       sb->s_id);
 		err = -EINVAL;
 		goto restore_opts;
 	}

@@ -21,6 +21,7 @@
 #include <linux/rcupdate.h>
 #include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
+#include <linux/vs_limit.h>
 
 #include <asm/poll.h>
 #include <asm/siginfo.h>
@@ -376,6 +377,8 @@ SYSCALL_DEFINE3(fcntl64, unsigned int, fd, unsigned int, cmd,
 	long err = -EBADF;
 
 	if (!f.file)
+		goto out;
+	if (!vx_files_avail(1))
 		goto out;
 
 	if (unlikely(f.file->f_mode & FMODE_PATH)) {

@@ -556,6 +556,8 @@ source "fs/Kconfig"
 
 source "arch/sparc/Kconfig.debug"
 
+source "kernel/vserver/Kconfig"
+
 source "security/Kconfig"
 
 source "crypto/Kconfig"

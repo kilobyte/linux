@@ -309,14 +309,7 @@ fail:
 }
 EXPORT_SYMBOL(udp_lib_get_port);
 
-static int ipv4_rcv_saddr_equal(const struct sock *sk1, const struct sock *sk2)
-{
-	struct inet_sock *inet1 = inet_sk(sk1), *inet2 = inet_sk(sk2);
-
-	return 	(!ipv6_only_sock(sk2)  &&
-		 (!inet1->inet_rcv_saddr || !inet2->inet_rcv_saddr ||
-		   inet1->inet_rcv_saddr == inet2->inet_rcv_saddr));
-}
+extern int ipv4_rcv_saddr_equal(const struct sock *, const struct sock *);
 
 static unsigned int udp4_portaddr_hash(struct net *net, __be32 saddr,
 				       unsigned int port)
@@ -351,6 +344,11 @@ static inline int compute_score(struct sock *sk, struct net *net, __be32 saddr,
 			if (inet->inet_rcv_saddr != daddr)
 				return -1;
 			score += 4;
+		} else {
+			/* block non nx_info ips */
+			if (!v4_addr_in_nx_info(sk->sk_nx_info,
+				daddr, NXA_MASK_BIND))
+				return -1;
 		}
 		if (inet->inet_daddr) {
 			if (inet->inet_daddr != saddr)
@@ -473,6 +471,7 @@ begin:
 	return result;
 }
 
+
 /* UDP is nearly always wildcards out the wazoo, it makes no sense to try
  * harder than this. -DaveM
  */
@@ -519,6 +518,11 @@ begin:
 	sk_nulls_for_each_rcu(sk, node, &hslot->head) {
 		score = compute_score(sk, net, saddr, hnum, sport,
 				      daddr, dport, dif);
+		/* FIXME: disabled?
+		if (score == 9) {
+			result = sk;
+			break;
+		} else */
 		if (score > badness) {
 			result = sk;
 			badness = score;
@@ -543,6 +547,7 @@ begin:
 	if (get_nulls_value(node) != slot)
 		goto begin;
 
+
 	if (result) {
 		if (unlikely(!atomic_inc_not_zero_hint(&result->sk_refcnt, 2)))
 			result = NULL;
@@ -552,6 +557,7 @@ begin:
 			goto begin;
 		}
 	}
+
 	rcu_read_unlock();
 	return result;
 }
@@ -586,7 +592,7 @@ static inline bool __udp_is_mcast_sock(struct net *net, struct sock *sk,
 	    udp_sk(sk)->udp_port_hash != hnum ||
 	    (inet->inet_daddr && inet->inet_daddr != rmt_addr) ||
 	    (inet->inet_dport != rmt_port && inet->inet_dport) ||
-	    (inet->inet_rcv_saddr && inet->inet_rcv_saddr != loc_addr) ||
+	    !v4_sock_addr_match(sk->sk_nx_info, inet, loc_addr)	||
 	    ipv6_only_sock(sk) ||
 	    (sk->sk_bound_dev_if && sk->sk_bound_dev_if != dif))
 		return false;
@@ -990,6 +996,16 @@ int udp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 				   inet_sk_flowi_flags(sk),
 				   faddr, saddr, dport, inet->inet_sport);
 
+		if (sk->sk_nx_info) {
+			rt = ip_v4_find_src(net, sk->sk_nx_info, fl4);
+			if (IS_ERR(rt)) {
+				err = PTR_ERR(rt);
+				rt = NULL;
+				goto out;
+			}
+			ip_rt_put(rt);
+		}
+
 		security_sk_classify_flow(sk, flowi4_to_flowi(fl4));
 		rt = ip_route_output_flow(net, fl4, sk);
 		if (IS_ERR(rt)) {
@@ -1294,7 +1310,8 @@ try_again:
 	if (sin) {
 		sin->sin_family = AF_INET;
 		sin->sin_port = udp_hdr(skb)->source;
-		sin->sin_addr.s_addr = ip_hdr(skb)->saddr;
+		sin->sin_addr.s_addr = nx_map_sock_lback(
+			skb->sk->sk_nx_info, ip_hdr(skb)->saddr);
 		memset(sin->sin_zero, 0, sizeof(sin->sin_zero));
 		*addr_len = sizeof(*sin);
 	}
@@ -2248,6 +2265,8 @@ static struct sock *udp_get_first(struct seq_file *seq, int start)
 		sk_nulls_for_each(sk, node, &hslot->head) {
 			if (!net_eq(sock_net(sk), net))
 				continue;
+			if (!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
+				continue;
 			if (sk->sk_family == state->family)
 				goto found;
 		}
@@ -2265,7 +2284,9 @@ static struct sock *udp_get_next(struct seq_file *seq, struct sock *sk)
 
 	do {
 		sk = sk_nulls_next(sk);
-	} while (sk && (!net_eq(sock_net(sk), net) || sk->sk_family != state->family));
+	} while (sk && (!net_eq(sock_net(sk), net) ||
+		sk->sk_family != state->family ||
+		!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT)));
 
 	if (!sk) {
 		if (state->bucket <= state->udp_table->mask)
@@ -2361,8 +2382,8 @@ static void udp4_format_sock(struct sock *sp, struct seq_file *f,
 		int bucket)
 {
 	struct inet_sock *inet = inet_sk(sp);
-	__be32 dest = inet->inet_daddr;
-	__be32 src  = inet->inet_rcv_saddr;
+	__be32 dest = nx_map_sock_lback(current_nx_info(), inet->inet_daddr);
+	__be32 src = nx_map_sock_lback(current_nx_info(), inet->inet_rcv_saddr);
 	__u16 destp	  = ntohs(inet->inet_dport);
 	__u16 srcp	  = ntohs(inet->inet_sport);
 

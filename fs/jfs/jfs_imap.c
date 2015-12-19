@@ -46,6 +46,7 @@
 #include <linux/pagemap.h>
 #include <linux/quotaops.h>
 #include <linux/slab.h>
+#include <linux/vs_tag.h>
 
 #include "jfs_incore.h"
 #include "jfs_inode.h"
@@ -3047,6 +3048,8 @@ static int copy_from_dinode(struct dinode * dip, struct inode *ip)
 {
 	struct jfs_inode_info *jfs_ip = JFS_IP(ip);
 	struct jfs_sb_info *sbi = JFS_SBI(ip->i_sb);
+	kuid_t kuid;
+	kgid_t kgid;
 
 	jfs_ip->fileset = le32_to_cpu(dip->di_fileset);
 	jfs_ip->mode2 = le32_to_cpu(dip->di_mode);
@@ -3067,14 +3070,18 @@ static int copy_from_dinode(struct dinode * dip, struct inode *ip)
 	}
 	set_nlink(ip, le32_to_cpu(dip->di_nlink));
 
-	jfs_ip->saved_uid = make_kuid(&init_user_ns, le32_to_cpu(dip->di_uid));
+	kuid = make_kuid(&init_user_ns, le32_to_cpu(dip->di_uid));
+	kgid = make_kgid(&init_user_ns, le32_to_cpu(dip->di_gid));
+	ip->i_tag = INOTAG_KTAG(DX_TAG(ip), kuid, kgid, GLOBAL_ROOT_TAG);
+
+	jfs_ip->saved_uid = INOTAG_KUID(DX_TAG(ip), kuid, kgid);
 	if (!uid_valid(sbi->uid))
 		ip->i_uid = jfs_ip->saved_uid;
 	else {
 		ip->i_uid = sbi->uid;
 	}
 
-	jfs_ip->saved_gid = make_kgid(&init_user_ns, le32_to_cpu(dip->di_gid));
+	jfs_ip->saved_gid = INOTAG_KGID(DX_TAG(ip), kuid, kgid);
 	if (!gid_valid(sbi->gid))
 		ip->i_gid = jfs_ip->saved_gid;
 	else {
@@ -3139,16 +3146,14 @@ static void copy_to_dinode(struct dinode * dip, struct inode *ip)
 	dip->di_size = cpu_to_le64(ip->i_size);
 	dip->di_nblocks = cpu_to_le64(PBLK2LBLK(ip->i_sb, ip->i_blocks));
 	dip->di_nlink = cpu_to_le32(ip->i_nlink);
-	if (!uid_valid(sbi->uid))
-		dip->di_uid = cpu_to_le32(i_uid_read(ip));
-	else
-		dip->di_uid =cpu_to_le32(from_kuid(&init_user_ns,
-						   jfs_ip->saved_uid));
-	if (!gid_valid(sbi->gid))
-		dip->di_gid = cpu_to_le32(i_gid_read(ip));
-	else
-		dip->di_gid = cpu_to_le32(from_kgid(&init_user_ns,
-						    jfs_ip->saved_gid));
+	dip->di_uid = cpu_to_le32(from_kuid(&init_user_ns,
+		TAGINO_KUID(DX_TAG(ip),
+		!uid_valid(sbi->uid) ? ip->i_uid : jfs_ip->saved_uid,
+		ip->i_tag)));
+	dip->di_gid = cpu_to_le32(from_kgid(&init_user_ns,
+		TAGINO_KGID(DX_TAG(ip),
+		!gid_valid(sbi->gid) ? ip->i_gid : jfs_ip->saved_gid,
+		ip->i_tag)));
 	jfs_get_inode_flags(jfs_ip);
 	/*
 	 * mode2 is only needed for storing the higher order bits.

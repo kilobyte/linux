@@ -914,6 +914,8 @@ source "fs/Kconfig"
 
 source "arch/sh/Kconfig.debug"
 
+source "kernel/vserver/Kconfig"
+
 source "security/Kconfig"
 
 source "crypto/Kconfig"

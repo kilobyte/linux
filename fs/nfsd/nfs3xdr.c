@@ -8,6 +8,7 @@
 
 #include <linux/namei.h>
 #include <linux/sunrpc/svc_xprt.h>
+#include <linux/vs_tag.h>
 #include "xdr3.h"
 #include "auth.h"
 #include "netns.h"
@@ -98,6 +99,8 @@ static __be32 *
 decode_sattr3(__be32 *p, struct iattr *iap)
 {
 	u32	tmp;
+	kuid_t	kuid = GLOBAL_ROOT_UID;
+	kgid_t	kgid = GLOBAL_ROOT_GID;
 
 	iap->ia_valid = 0;
 
@@ -106,15 +109,18 @@ decode_sattr3(__be32 *p, struct iattr *iap)
 		iap->ia_mode = ntohl(*p++);
 	}
 	if (*p++) {
-		iap->ia_uid = make_kuid(&init_user_ns, ntohl(*p++));
+		kuid = make_kuid(&init_user_ns, ntohl(*p++));
 		if (uid_valid(iap->ia_uid))
 			iap->ia_valid |= ATTR_UID;
 	}
 	if (*p++) {
-		iap->ia_gid = make_kgid(&init_user_ns, ntohl(*p++));
+		kgid = make_kgid(&init_user_ns, ntohl(*p++));
 		if (gid_valid(iap->ia_gid))
 			iap->ia_valid |= ATTR_GID;
 	}
+	iap->ia_uid = INOTAG_KUID(DX_TAG_NFSD, kuid, kgid);
+	iap->ia_gid = INOTAG_KGID(DX_TAG_NFSD, kuid, kgid);
+	iap->ia_tag = INOTAG_KTAG(DX_TAG_NFSD, kuid, kgid, GLOBAL_ROOT_TAG);
 	if (*p++) {
 		u64	newsize;
 
@@ -170,8 +176,12 @@ encode_fattr3(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp,
 	*p++ = htonl(nfs3_ftypes[(stat->mode & S_IFMT) >> 12]);
 	*p++ = htonl((u32) (stat->mode & S_IALLUGO));
 	*p++ = htonl((u32) stat->nlink);
-	*p++ = htonl((u32) from_kuid(&init_user_ns, stat->uid));
-	*p++ = htonl((u32) from_kgid(&init_user_ns, stat->gid));
+	*p++ = htonl((u32) from_kuid(&init_user_ns,
+		TAGINO_KUID(0 /* FIXME: DX_TAG(dentry->d_inode) */,
+		stat->uid, stat->tag)));
+	*p++ = htonl((u32) from_kgid(&init_user_ns,
+		TAGINO_KGID(0 /* FIXME: DX_TAG(dentry->d_inode) */,
+		stat->gid, stat->tag)));
 	if (S_ISLNK(stat->mode) && stat->size > NFS3_MAXPATHLEN) {
 		p = xdr_encode_hyper(p, (u64) NFS3_MAXPATHLEN);
 	} else {

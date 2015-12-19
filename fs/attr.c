@@ -15,6 +15,9 @@
 #include <linux/security.h>
 #include <linux/evm.h>
 #include <linux/ima.h>
+#include <linux/proc_fs.h>
+#include <linux/devpts_fs.h>
+#include <linux/vs_tag.h>
 
 /**
  * inode_change_ok - check if attribute changes to an inode are allowed
@@ -76,6 +79,10 @@ int inode_change_ok(const struct inode *inode, struct iattr *attr)
 		if (!inode_owner_or_capable(inode))
 			return -EPERM;
 	}
+
+	/* check for inode tag permission */
+	if (dx_permission(inode, MAY_WRITE))
+		return -EACCES;
 
 	return 0;
 }
@@ -147,6 +154,8 @@ void setattr_copy(struct inode *inode, const struct iattr *attr)
 		inode->i_uid = attr->ia_uid;
 	if (ia_valid & ATTR_GID)
 		inode->i_gid = attr->ia_gid;
+	if ((ia_valid & ATTR_TAG) && IS_TAGGED(inode))
+		inode->i_tag = attr->ia_tag;
 	if (ia_valid & ATTR_ATIME)
 		inode->i_atime = timespec_trunc(attr->ia_atime,
 						inode->i_sb->s_time_gran);
@@ -197,7 +206,8 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 
 	WARN_ON_ONCE(!mutex_is_locked(&inode->i_mutex));
 
-	if (ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID | ATTR_TIMES_SET)) {
+	if (ia_valid & (ATTR_MODE | ATTR_UID | ATTR_GID |
+		ATTR_TAG | ATTR_TIMES_SET)) {
 		if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 			return -EPERM;
 	}

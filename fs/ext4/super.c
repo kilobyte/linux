@@ -1169,7 +1169,7 @@ enum {
 	Opt_inode_readahead_blks, Opt_journal_ioprio,
 	Opt_dioread_nolock, Opt_dioread_lock,
 	Opt_discard, Opt_nodiscard, Opt_init_itable, Opt_noinit_itable,
-	Opt_max_dir_size_kb,
+	Opt_max_dir_size_kb, Opt_tag, Opt_notag, Opt_tagid
 };
 
 static const match_table_t tokens = {
@@ -1250,6 +1250,9 @@ static const match_table_t tokens = {
 	{Opt_removed, "reservation"},	/* mount option from ext2/3 */
 	{Opt_removed, "noreservation"}, /* mount option from ext2/3 */
 	{Opt_removed, "journal=%u"},	/* mount option from ext2/3 */
+	{Opt_tag, "tag"},
+	{Opt_notag, "notag"},
+	{Opt_tagid, "tagid=%u"},
 	{Opt_err, NULL},
 };
 
@@ -1482,6 +1485,20 @@ static int handle_mount_opt(struct super_block *sb, char *opt, int token,
 	case Opt_i_version:
 		sb->s_flags |= MS_I_VERSION;
 		return 1;
+#ifndef CONFIG_TAGGING_NONE
+	case Opt_tag:
+		set_opt(sb, TAGGED);
+		return 1;
+	case Opt_notag:
+		clear_opt(sb, TAGGED);
+		return 1;
+#endif
+#ifdef CONFIG_PROPAGATE
+	case Opt_tagid:
+		/* use args[0] */
+		set_opt(sb, TAGGED);
+		return 1;
+#endif
 	}
 
 	for (m = ext4_mount_opts; m->token != Opt_err; m++)
@@ -3569,6 +3586,9 @@ static int ext4_fill_super(struct super_block *sb, void *data, int silent)
 			clear_opt(sb, DELALLOC);
 	}
 
+	if (EXT4_SB(sb)->s_mount_opt & EXT4_MOUNT_TAGGED)
+		sb->s_flags |= MS_TAGGED;
+
 	sb->s_flags = (sb->s_flags & ~MS_POSIXACL) |
 		(test_opt(sb, POSIX_ACL) ? MS_POSIXACL : 0);
 
@@ -4822,6 +4842,14 @@ static int ext4_remount(struct super_block *sb, int *flags, char *data)
 
 	if (sbi->s_mount_flags & EXT4_MF_FS_ABORTED)
 		ext4_abort(sb, "Abort forced by user");
+
+	if ((sbi->s_mount_opt & EXT4_MOUNT_TAGGED) &&
+		!(sb->s_flags & MS_TAGGED)) {
+		printk("EXT4-fs: %s: tagging not permitted on remount.\n",
+			sb->s_id);
+		err = -EINVAL;
+		goto restore_opts;
+	}
 
 	sb->s_flags = (sb->s_flags & ~MS_POSIXACL) |
 		(test_opt(sb, POSIX_ACL) ? MS_POSIXACL : 0);

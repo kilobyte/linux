@@ -447,7 +447,7 @@ static struct sk_buff *br_ip6_multicast_alloc_query(struct net_bridge *br,
 	ip6h->hop_limit = 1;
 	ipv6_addr_set(&ip6h->daddr, htonl(0xff020000), 0, 0, htonl(1));
 	if (ipv6_dev_get_saddr(dev_net(br->dev), br->dev, &ip6h->daddr, 0,
-			       &ip6h->saddr)) {
+			       &ip6h->saddr, NULL)) {
 		kfree_skb(skb);
 		return NULL;
 	}

@@ -34,10 +34,20 @@
 #include <linux/device_cgroup.h>
 #include <linux/fs_struct.h>
 #include <linux/posix_acl.h>
+#include <linux/proc_fs.h>
+#include <linux/magic.h>
+#include <linux/vserver/inode.h>
+#include <linux/vs_base.h>
+#include <linux/vs_tag.h>
+#include <linux/vs_cowbl.h>
+#include <linux/vs_device.h>
+#include <linux/vs_context.h>
+#include <linux/pid_namespace.h>
 #include <linux/hash.h>
 #include <asm/uaccess.h>
 
 #include "internal.h"
+#include "proc/internal.h"
 #include "mount.h"
 
 /* [Feb-1997 T. Schoebel-Theuer]
@@ -278,6 +288,89 @@ static int check_acl(struct inode *inode, int mask)
 	return -EAGAIN;
 }
 
+static inline int dx_barrier(const struct inode *inode)
+{
+	if (IS_BARRIER(inode) && !vx_check(0, VS_ADMIN | VS_WATCH)) {
+		vxwprintk_task(1, "did hit the barrier.");
+		return 1;
+	}
+	return 0;
+}
+
+static int __dx_permission(const struct inode *inode, int mask)
+{
+	if (dx_barrier(inode))
+		return -EACCES;
+
+	if (inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC) {
+		/* devpts is xid tagged */
+		if (S_ISDIR(inode->i_mode) ||
+		    vx_check((vxid_t)i_tag_read(inode), VS_IDENT | VS_WATCH_P))
+			return 0;
+
+		/* just pretend we didn't find anything */
+		return -ENOENT;
+	}
+	else if (inode->i_sb->s_magic == PROC_SUPER_MAGIC) {
+		struct proc_dir_entry *de = PDE(inode);
+
+		if (de && !vx_hide_check(0, de->vx_flags))
+			goto out;
+
+		if ((mask & (MAY_WRITE | MAY_APPEND))) {
+			struct pid *pid;
+			struct task_struct *tsk;
+
+			if (vx_check(0, VS_ADMIN | VS_WATCH_P) ||
+			    vx_flags(VXF_STATE_SETUP, 0))
+				return 0;
+
+			pid = PROC_I(inode)->pid;
+			if (!pid)
+				goto out;
+
+			rcu_read_lock();
+			tsk = pid_task(pid, PIDTYPE_PID);
+			vxdprintk(VXD_CBIT(tag, 0), "accessing %p[#%u]",
+				  tsk, (tsk ? vx_task_xid(tsk) : 0));
+			if (tsk &&
+				vx_check(vx_task_xid(tsk), VS_IDENT | VS_WATCH_P)) {
+				rcu_read_unlock();
+				return 0;
+			}
+			rcu_read_unlock();
+		}
+		else {
+			/* FIXME: Should we block some entries here? */
+			return 0;
+		}
+	}
+	else {
+		if (dx_notagcheck(inode->i_sb) ||
+		    dx_check((vxid_t)i_tag_read(inode),
+			DX_HOSTID | DX_ADMIN | DX_WATCH | DX_IDENT))
+			return 0;
+	}
+
+out:
+	return -EACCES;
+}
+
+int dx_permission(const struct inode *inode, int mask)
+{
+	int ret = __dx_permission(inode, mask);
+	if (unlikely(ret)) {
+#ifndef	CONFIG_VSERVER_WARN_DEVPTS
+		if (inode->i_sb->s_magic != DEVPTS_SUPER_MAGIC)
+#endif
+		    vxwprintk_task(1,
+			"denied [0x%x] access to inode %s:%p[#%d,%lu]",
+			mask, inode->i_sb->s_id, inode,
+			i_tag_read(inode), inode->i_ino);
+	}
+	return ret;
+}
+
 /*
  * This does the basic permission checking
  */
@@ -401,9 +494,13 @@ int __inode_permission(struct inode *inode, int mask)
 		/*
 		 * Nobody gets write access to an immutable file.
 		 */
-		if (IS_IMMUTABLE(inode))
+		if (IS_IMMUTABLE(inode) && !IS_COW(inode))
 			return -EACCES;
 	}
+
+	retval = dx_permission(inode, mask);
+	if (retval)
+		return retval;
 
 	retval = do_inode_permission(inode, mask);
 	if (retval)
@@ -1422,6 +1519,9 @@ static int lookup_fast(struct nameidata *nd,
 				goto unlazy;
 			}
 		}
+
+		/* FIXME: check dx permission */
+
 		path->mnt = mnt;
 		path->dentry = dentry;
 		if (unlikely(!__follow_mount_rcu(nd, path, inode)))
@@ -1451,6 +1551,8 @@ unlazy:
 			goto need_lookup;
 		}
 	}
+
+	/* FIXME: check dx permission */
 
 	path->mnt = mnt;
 	path->dentry = dentry;
@@ -2440,7 +2542,7 @@ static int may_delete(struct inode *dir, struct dentry *victim, bool isdir)
 		return -EPERM;
 
 	if (check_sticky(dir, inode) || IS_APPEND(inode) ||
-	    IS_IMMUTABLE(inode) || IS_SWAPFILE(inode))
+		IS_IXORUNLINK(inode) || IS_SWAPFILE(inode))
 		return -EPERM;
 	if (isdir) {
 		if (!d_is_dir(victim))
@@ -2520,19 +2622,25 @@ int vfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 		bool want_excl)
 {
 	int error = may_create(dir, dentry);
-	if (error)
+	if (error) {
+		vxdprintk(VXD_CBIT(misc, 3), "may_create failed with %d", error);
 		return error;
+	}
 
 	if (!dir->i_op->create)
 		return -EACCES;	/* shouldn't it be ENOSYS? */
 	mode &= S_IALLUGO;
 	mode |= S_IFREG;
 	error = security_inode_create(dir, dentry, mode);
-	if (error)
+	if (error) {
+		vxdprintk(VXD_CBIT(misc, 3), "security_inode_create failed with %d", error);
 		return error;
+	}
 	error = dir->i_op->create(dir, dentry, mode, want_excl);
 	if (!error)
 		fsnotify_create(dir, dentry);
+	else
+		vxdprintk(VXD_CBIT(misc, 3), "i_op->create failed with %d", error);
 	return error;
 }
 
@@ -2567,6 +2675,15 @@ static int may_open(struct path *path, int acc_mode, int flag)
 		break;
 	}
 
+#ifdef	CONFIG_VSERVER_COWBL
+	if (IS_COW(inode) &&
+		((flag & O_ACCMODE) != O_RDONLY)) {
+		if (IS_COW_LINK(inode))
+			return -EMLINK;
+		inode->i_flags &= ~(S_IXUNLINK|S_IMMUTABLE);
+		mark_inode_dirty(inode);
+	}
+#endif
 	error = inode_permission(inode, acc_mode);
 	if (error)
 		return error;
@@ -3062,6 +3179,16 @@ finish_open:
 	}
 finish_open_created:
 	error = may_open(&nd->path, acc_mode, open_flag);
+#ifdef	CONFIG_VSERVER_COWBL
+	if (error == -EMLINK) {
+		struct dentry *dentry;
+		dentry = cow_break_link(name->name);
+		if (IS_ERR(dentry))
+			error = PTR_ERR(dentry);
+		else
+			dput(dentry);
+	}
+#endif
 	if (error)
 		goto out;
 	file->f_path.mnt = nd->path.mnt;
@@ -3192,6 +3319,7 @@ static struct file *path_openat(int dfd, struct filename *pathname,
 	int opened = 0;
 	int error;
 
+restart:
 	file = get_empty_filp();
 	if (IS_ERR(file))
 		return file;
@@ -3233,6 +3361,16 @@ static struct file *path_openat(int dfd, struct filename *pathname,
 		error = do_last(nd, &path, file, op, &opened, pathname);
 		put_link(nd, &link, cookie);
 	}
+
+#ifdef	CONFIG_VSERVER_COWBL
+	if (error == -EMLINK) {
+		if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT))
+			path_put(&nd->root);
+		if (base)
+			fput(base);
+		goto restart;
+	}
+#endif
 out:
 	if (nd->root.mnt && !(nd->flags & LOOKUP_ROOT))
 		path_put(&nd->root);
@@ -3349,6 +3487,11 @@ struct dentry *kern_path_create(int dfd, const char *pathname,
 		goto fail;
 	}
 	*path = nd.path;
+	vxdprintk(VXD_CBIT(misc, 3), "kern_path_create path.dentry = %p (%.*s), dentry = %p (%.*s), d_inode = %p",
+		path->dentry, path->dentry->d_name.len,
+		path->dentry->d_name.name, dentry,
+		dentry->d_name.len, dentry->d_name.name,
+		path->dentry->d_inode);
 	return dentry;
 fail:
 	dput(dentry);
@@ -3896,7 +4039,7 @@ int vfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *new_de
 	/*
 	 * A link to an append-only or immutable file cannot be created.
 	 */
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
+	if (IS_APPEND(inode) || IS_IXORUNLINK(inode))
 		return -EPERM;
 	if (!dir->i_op->link)
 		return -EPERM;
@@ -4351,6 +4494,287 @@ int generic_readlink(struct dentry *dentry, char __user *buffer, int buflen)
 	return res;
 }
 
+
+#ifdef	CONFIG_VSERVER_COWBL
+
+static inline
+long do_cow_splice(struct file *in, struct file *out, size_t len)
+{
+	loff_t ppos = 0;
+	loff_t opos = 0;
+
+	return do_splice_direct(in, &ppos, out, &opos, len, 0);
+}
+
+struct dentry *cow_break_link(const char *pathname)
+{
+	int ret, mode, pathlen, redo = 0, drop = 1;
+	struct nameidata old_nd, dir_nd;
+	struct path dir_path, *old_path, *new_path;
+	struct dentry *dir, *old_dentry, *new_dentry = NULL;
+	struct file *old_file;
+	struct file *new_file;
+	char *to, *path, pad='\251';
+	loff_t size;
+
+	vxdprintk(VXD_CBIT(misc, 1),
+		"cow_break_link(" VS_Q("%s") ")", pathname);
+
+	path = kmalloc(PATH_MAX, GFP_KERNEL);
+	ret = -ENOMEM;
+	if (!path)
+		goto out;
+
+	/* old_nd.path will have refs to dentry and mnt */
+	ret = do_path_lookup(AT_FDCWD, pathname, LOOKUP_FOLLOW, &old_nd);
+	vxdprintk(VXD_CBIT(misc, 2),
+		"do_path_lookup(old): %d", ret);
+	if (ret < 0)
+		goto out_free_path;
+
+	/* dentry/mnt refs handed over to old_path */
+	old_path = &old_nd.path;
+	/* no explicit reference for old_dentry here */
+	old_dentry = old_path->dentry;
+
+	mode = old_dentry->d_inode->i_mode;
+	to = d_path(old_path, path, PATH_MAX-2);
+	pathlen = strlen(to);
+	vxdprintk(VXD_CBIT(misc, 2),
+		"old path " VS_Q("%s") " [%p:" VS_Q("%.*s") ":%d]", to,
+		old_dentry,
+		old_dentry->d_name.len, old_dentry->d_name.name,
+		old_dentry->d_name.len);
+
+	to[pathlen + 1] = 0;
+retry:
+	new_dentry = NULL;
+	to[pathlen] = pad--;
+	ret = -ELOOP;
+	if (pad <= '\240')
+		goto out_rel_old;
+
+	vxdprintk(VXD_CBIT(misc, 1), "temp copy " VS_Q("%s"), to);
+
+	/* dir_nd.path will have refs to dentry and mnt */
+	ret = do_path_lookup(AT_FDCWD, to,
+		LOOKUP_PARENT | LOOKUP_OPEN | LOOKUP_CREATE, &dir_nd);
+	vxdprintk(VXD_CBIT(misc, 2), "do_path_lookup(new): %d", ret);
+	if (ret < 0)
+		goto retry;
+
+	/* this puppy downs the dir inode mutex if successful.
+	   dir_path will hold refs to dentry and mnt and
+	   we'll have write access to the mnt */
+	new_dentry = kern_path_create(AT_FDCWD, to, &dir_path, 0);
+	if (!new_dentry || IS_ERR(new_dentry)) {
+		path_put(&dir_nd.path);
+		vxdprintk(VXD_CBIT(misc, 2),
+			"kern_path_create(new) failed with %ld",
+			PTR_ERR(new_dentry));
+		goto retry;
+	}
+	vxdprintk(VXD_CBIT(misc, 2),
+		"kern_path_create(new): %p [" VS_Q("%.*s") ":%d]",
+		new_dentry,
+		new_dentry->d_name.len, new_dentry->d_name.name,
+		new_dentry->d_name.len);
+
+	/* take a reference on new_dentry */
+	dget(new_dentry);
+
+	/* dentry/mnt refs handed over to new_path */
+	new_path = &dir_path;
+
+	/* dentry for old/new dir */
+	dir = dir_nd.path.dentry;
+
+	/* give up reference on dir */
+	dput(new_path->dentry);
+
+	/* new_dentry already has a reference */
+	new_path->dentry = new_dentry;
+
+	ret = vfs_create(dir->d_inode, new_dentry, mode, 1);
+	vxdprintk(VXD_CBIT(misc, 2),
+		"vfs_create(new): %d", ret);
+	if (ret == -EEXIST) {
+		path_put(&dir_nd.path);
+		mutex_unlock(&dir->d_inode->i_mutex);
+		mnt_drop_write(new_path->mnt);
+		path_put(new_path);
+		new_dentry = NULL;
+		goto retry;
+	}
+	else if (ret < 0)
+		goto out_unlock_new;
+
+	/* drop out early, ret passes ENOENT */
+	ret = -ENOENT;
+	if ((redo = d_unhashed(old_dentry)))
+		goto out_unlock_new;
+
+	/* doesn't change refs for old_path */
+	old_file = dentry_open(old_path, O_RDONLY, current_cred());
+	vxdprintk(VXD_CBIT(misc, 2),
+		"dentry_open(old): %p", old_file);
+	if (IS_ERR(old_file)) {
+		ret = PTR_ERR(old_file);
+		goto out_unlock_new;
+	}
+
+	/* doesn't change refs for new_path */
+	new_file = dentry_open(new_path, O_WRONLY, current_cred());
+	vxdprintk(VXD_CBIT(misc, 2),
+		"dentry_open(new): %p", new_file);
+	if (IS_ERR(new_file)) {
+		ret = PTR_ERR(new_file);
+		goto out_fput_old;
+	}
+
+	/* unlock the inode mutex from kern_path_create() */
+	mutex_unlock(&dir->d_inode->i_mutex);
+
+	/* drop write access to mnt */
+	mnt_drop_write(new_path->mnt);
+
+	drop = 0;
+
+	size = i_size_read(old_file->f_dentry->d_inode);
+	ret = do_cow_splice(old_file, new_file, size);
+	vxdprintk(VXD_CBIT(misc, 2), "do_splice_direct: %d", ret);
+	if (ret < 0) {
+		goto out_fput_both;
+	} else if (ret < size) {
+		ret = -ENOSPC;
+		goto out_fput_both;
+	} else {
+		struct inode *old_inode = old_dentry->d_inode;
+		struct inode *new_inode = new_dentry->d_inode;
+		struct iattr attr = {
+			.ia_uid = old_inode->i_uid,
+			.ia_gid = old_inode->i_gid,
+			.ia_valid = ATTR_UID | ATTR_GID
+			};
+
+		setattr_copy(new_inode, &attr);
+		mark_inode_dirty(new_inode);
+	}
+
+	/* lock rename mutex */
+	mutex_lock(&old_dentry->d_inode->i_sb->s_vfs_rename_mutex);
+
+	/* drop out late */
+	ret = -ENOENT;
+	if ((redo = d_unhashed(old_dentry)))
+		goto out_unlock;
+
+	vxdprintk(VXD_CBIT(misc, 2),
+		"vfs_rename: [" VS_Q("%*s") ":%d] -> [" VS_Q("%*s") ":%d]",
+		new_dentry->d_name.len, new_dentry->d_name.name,
+		new_dentry->d_name.len,
+		old_dentry->d_name.len, old_dentry->d_name.name,
+		old_dentry->d_name.len);
+	ret = vfs_rename(dir_nd.path.dentry->d_inode, new_dentry,
+		old_dentry->d_parent->d_inode, old_dentry, NULL);
+	vxdprintk(VXD_CBIT(misc, 2), "vfs_rename: %d", ret);
+
+out_unlock:
+	mutex_unlock(&old_dentry->d_inode->i_sb->s_vfs_rename_mutex);
+
+out_fput_both:
+	vxdprintk(VXD_CBIT(misc, 3),
+		"fput(new_file=%p[#%ld])", new_file,
+		atomic_long_read(&new_file->f_count));
+	fput(new_file);
+
+out_fput_old:
+	vxdprintk(VXD_CBIT(misc, 3),
+		"fput(old_file=%p[#%ld])", old_file,
+		atomic_long_read(&old_file->f_count));
+	fput(old_file);
+
+out_unlock_new:
+	/* drop references from dir_nd.path */
+	path_put(&dir_nd.path);
+
+	if (drop) {
+		/* unlock the inode mutex from kern_path_create() */
+		mutex_unlock(&dir->d_inode->i_mutex);
+
+		/* drop write access to mnt */
+		mnt_drop_write(new_path->mnt);
+	}
+
+	if (!ret)
+		goto out_redo;
+
+	/* error path cleanup */
+	vfs_unlink(dir->d_inode, new_dentry, NULL);
+
+out_redo:
+	if (!redo)
+		goto out_rel_both;
+
+	/* lookup dentry once again
+	   old_nd.path will be freed as old_path in out_rel_old */
+	ret = do_path_lookup(AT_FDCWD, pathname, LOOKUP_FOLLOW, &old_nd);
+	if (ret)
+		goto out_rel_both;
+
+	/* drop reference on new_dentry */
+	dput(new_dentry);
+	new_dentry = old_path->dentry;
+	dget(new_dentry);
+	vxdprintk(VXD_CBIT(misc, 2),
+		"do_path_lookup(redo): %p [" VS_Q("%.*s") ":%d]",
+		new_dentry,
+		new_dentry->d_name.len, new_dentry->d_name.name,
+		new_dentry->d_name.len);
+
+out_rel_both:
+	if (new_path)
+		path_put(new_path);
+out_rel_old:
+	path_put(old_path);
+out_free_path:
+	kfree(path);
+out:
+	if (ret) {
+		dput(new_dentry);
+		new_dentry = ERR_PTR(ret);
+	}
+	vxdprintk(VXD_CBIT(misc, 3),
+		"cow_break_link returning with %p", new_dentry);
+	return new_dentry;
+}
+
+#endif
+
+int	vx_info_mnt_namespace(struct mnt_namespace *ns, char *buffer)
+{
+	struct path path;
+	struct vfsmount *vmnt;
+	char *pstr, *root;
+	int length = 0;
+
+	pstr = kmalloc(PATH_MAX, GFP_KERNEL);
+	if (!pstr)
+		return 0;
+
+	vmnt = &ns->root->mnt;
+	path.mnt = vmnt;
+	path.dentry = vmnt->mnt_root;
+	root = d_path(&path, pstr, PATH_MAX - 2);
+	length = sprintf(buffer + length,
+		"Namespace:\t%p [#%u]\n"
+		"RootPath:\t%s\n",
+		ns, atomic_read(&ns->count),
+		root);
+	kfree(pstr);
+	return length;
+}
+
 /* get the link contents into pagecache */
 static char *page_getlink(struct dentry * dentry, struct page **ppage)
 {
@@ -4473,3 +4897,4 @@ EXPORT_SYMBOL(vfs_symlink);
 EXPORT_SYMBOL(vfs_unlink);
 EXPORT_SYMBOL(dentry_unhash);
 EXPORT_SYMBOL(generic_readlink);
+EXPORT_SYMBOL(vx_info_mnt_namespace);

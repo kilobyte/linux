@@ -65,6 +65,7 @@
 #include <linux/nsproxy.h>
 #include <linux/virtio_net.h>
 #include <linux/rcupdate.h>
+#include <linux/vs_network.h>
 #include <net/ipv6.h>
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
@@ -171,6 +172,7 @@ struct tun_struct {
 	unsigned int 		flags;
 	kuid_t			owner;
 	kgid_t			group;
+	vnid_t			nid;
 
 	struct net_device	*dev;
 	netdev_features_t	set_features;
@@ -404,6 +406,7 @@ static inline bool tun_not_capable(struct tun_struct *tun)
 	return ((uid_valid(tun->owner) && !uid_eq(cred->euid, tun->owner)) ||
 		  (gid_valid(tun->group) && !in_egroup_p(tun->group))) &&
 		!ns_capable(net->user_ns, CAP_NET_ADMIN);
+		/* !cap_raised(current_cap(), CAP_NET_ADMIN) */
 }
 
 static void tun_set_real_num_queues(struct tun_struct *tun)
@@ -1423,6 +1426,7 @@ static void tun_setup(struct net_device *dev)
 
 	tun->owner = INVALID_UID;
 	tun->group = INVALID_GID;
+	tun->nid = nx_current_nid();
 
 	dev->ethtool_ops = &tun_ethtool_ops;
 	dev->destructor = tun_free_netdev;
@@ -1639,7 +1643,7 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 		int queues = ifr->ifr_flags & IFF_MULTI_QUEUE ?
 			     MAX_TAP_QUEUES : 1;
 
-		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
+		if (!nx_ns_capable(net->user_ns, CAP_NET_ADMIN, NXC_TUN_CREATE))
 			return -EPERM;
 		err = security_tun_dev_create();
 		if (err < 0)
@@ -2008,6 +2012,16 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		tun->group = group;
 		tun_debug(KERN_INFO, tun, "group set to %u\n",
 			  from_kgid(&init_user_ns, tun->group));
+		break;
+
+	case TUNSETNID:
+		if (!capable(CAP_CONTEXT))
+			return -EPERM;
+
+		/* Set nid owner of the device */
+		tun->nid = (vnid_t) arg;
+
+		tun_debug(KERN_INFO, tun, "nid owner set to %u\n", tun->nid);
 		break;
 
 	case TUNSETLINK:

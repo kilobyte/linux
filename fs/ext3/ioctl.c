@@ -12,6 +12,34 @@
 #include <asm/uaccess.h>
 #include "ext3.h"
 
+
+int ext3_sync_flags(struct inode *inode, int flags, int vflags)
+{
+	handle_t *handle = NULL;
+	struct ext3_iloc iloc;
+	int err;
+
+	handle = ext3_journal_start(inode, 1);
+	if (IS_ERR(handle))
+		return PTR_ERR(handle);
+
+	if (IS_SYNC(inode))
+		handle->h_sync = 1;
+	err = ext3_reserve_inode_write(handle, inode, &iloc);
+	if (err)
+		goto flags_err;
+
+	inode->i_flags = flags;
+	inode->i_vflags = vflags;
+	ext3_get_inode_flags(EXT3_I(inode));
+	inode->i_ctime = CURRENT_TIME_SEC;
+
+	err = ext3_mark_iloc_dirty(handle, inode, &iloc);
+flags_err:
+	ext3_journal_stop(handle);
+	return err;
+}
+
 long ext3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -45,6 +73,11 @@ long ext3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		flags = ext3_mask_flags(inode->i_mode, flags);
 
+		if (IS_BARRIER(inode)) {
+			vxwprintk_task(1, "messing with the barrier.");
+			return -EACCES;
+		}
+
 		mutex_lock(&inode->i_mutex);
 
 		/* Is it quota file? Do not allow user to mess with it */
@@ -63,7 +96,9 @@ long ext3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		 *
 		 * This test looks nicer. Thanks to Pauline Middelink
 		 */
-		if ((flags ^ oldflags) & (EXT3_APPEND_FL | EXT3_IMMUTABLE_FL)) {
+		if ((oldflags & EXT3_IMMUTABLE_FL) ||
+			((flags ^ oldflags) & (EXT3_APPEND_FL |
+			EXT3_IMMUTABLE_FL | EXT3_IXUNLINK_FL))) {
 			if (!capable(CAP_LINUX_IMMUTABLE))
 				goto flags_out;
 		}
@@ -88,7 +123,7 @@ long ext3_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		if (err)
 			goto flags_err;
 
-		flags = flags & EXT3_FL_USER_MODIFIABLE;
+		flags &= EXT3_FL_USER_MODIFIABLE;
 		flags |= oldflags & ~EXT3_FL_USER_MODIFIABLE;
 		ei->i_flags = flags;
 

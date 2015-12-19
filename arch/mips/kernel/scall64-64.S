@@ -352,7 +352,7 @@ EXPORT(sys_call_table)
 	PTR	sys_mq_timedreceive
 	PTR	sys_mq_notify
 	PTR	sys_mq_getsetattr		/* 5235 */
-	PTR	sys_ni_syscall			/* sys_vserver */
+	PTR	sys_vserver
 	PTR	sys_waitid
 	PTR	sys_ni_syscall			/* available, was setaltroot */
 	PTR	sys_add_key

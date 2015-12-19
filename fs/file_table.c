@@ -26,6 +26,8 @@
 #include <linux/hardirq.h>
 #include <linux/task_work.h>
 #include <linux/ima.h>
+#include <linux/vs_limit.h>
+#include <linux/vs_context.h>
 
 #include <linux/atomic.h>
 
@@ -138,6 +140,8 @@ struct file *get_empty_filp(void)
 	mutex_init(&f->f_pos_lock);
 	eventpoll_init_file(f);
 	/* f->f_version: 0 */
+	f->f_xid = vx_current_xid();
+	vx_files_inc(f);
 	return f;
 
 over:
@@ -255,6 +259,8 @@ static void __fput(struct file *file)
 		i_readcount_dec(inode);
 	if (file->f_mode & FMODE_WRITE)
 		drop_file_write_access(file);
+	vx_files_dec(file);
+	file->f_xid = 0;
 	file->f_path.dentry = NULL;
 	file->f_path.mnt = NULL;
 	file->f_inode = NULL;
@@ -341,6 +347,8 @@ void put_filp(struct file *file)
 {
 	if (atomic_long_dec_and_test(&file->f_count)) {
 		security_file_free(file);
+		vx_files_dec(file);
+		file->f_xid = 0;
 		file_free(file);
 	}
 }

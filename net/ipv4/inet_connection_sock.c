@@ -45,6 +45,37 @@ void inet_get_local_port_range(struct net *net, int *low, int *high)
 }
 EXPORT_SYMBOL(inet_get_local_port_range);
 
+int ipv4_rcv_saddr_equal(const struct sock *sk1, const struct sock *sk2)
+{
+	__be32	sk1_rcv_saddr = sk1->sk_rcv_saddr,
+		sk2_rcv_saddr = sk2->sk_rcv_saddr;
+
+	if (inet_v6_ipv6only(sk2))
+		return 0;
+
+	if (sk1_rcv_saddr &&
+	    sk2_rcv_saddr &&
+	    sk1_rcv_saddr == sk2_rcv_saddr)
+		return 1;
+
+	if (sk1_rcv_saddr &&
+	    !sk2_rcv_saddr &&
+	    v4_addr_in_nx_info(sk2->sk_nx_info, sk1_rcv_saddr, NXA_MASK_BIND))
+		return 1;
+
+	if (sk2_rcv_saddr &&
+	    !sk1_rcv_saddr &&
+	    v4_addr_in_nx_info(sk1->sk_nx_info, sk2_rcv_saddr, NXA_MASK_BIND))
+		return 1;
+
+	if (!sk1_rcv_saddr &&
+	    !sk2_rcv_saddr &&
+	    nx_v4_addr_conflict(sk1->sk_nx_info, sk2->sk_nx_info))
+		return 1;
+
+	return 0;
+}
+
 int inet_csk_bind_conflict(const struct sock *sk,
 			   const struct inet_bind_bucket *tb, bool relax)
 {
@@ -72,15 +103,13 @@ int inet_csk_bind_conflict(const struct sock *sk,
 			    (sk2->sk_state != TCP_TIME_WAIT &&
 			     !uid_eq(uid, sock_i_uid(sk2))))) {
 
-				if (!sk2->sk_rcv_saddr || !sk->sk_rcv_saddr ||
-				    sk2->sk_rcv_saddr == sk->sk_rcv_saddr)
+				if (ipv4_rcv_saddr_equal(sk, sk2))
 					break;
 			}
 			if (!relax && reuse && sk2->sk_reuse &&
 			    sk2->sk_state != TCP_LISTEN) {
 
-				if (!sk2->sk_rcv_saddr || !sk->sk_rcv_saddr ||
-				    sk2->sk_rcv_saddr == sk->sk_rcv_saddr)
+				if (ipv4_rcv_saddr_equal(sk, sk2))
 					break;
 			}
 		}

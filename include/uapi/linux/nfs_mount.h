@@ -63,7 +63,8 @@ struct nfs_mount_data {
 #define NFS_MOUNT_SECFLAVOUR	0x2000	/* 5 non-text parsed mount data only */
 #define NFS_MOUNT_NORDIRPLUS	0x4000	/* 5 */
 #define NFS_MOUNT_UNSHARED	0x8000	/* 5 */
-#define NFS_MOUNT_FLAGMASK	0xFFFF
+#define NFS_MOUNT_TAGGED	0x10000	/* context tagging */
+#define NFS_MOUNT_FLAGMASK	0x1FFFF
 
 /* The following are for internal use only */
 #define NFS_MOUNT_LOOKUP_CACHE_NONEG	0x10000

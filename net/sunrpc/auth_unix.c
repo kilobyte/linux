@@ -13,11 +13,13 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/auth.h>
 #include <linux/user_namespace.h>
+#include <linux/vs_tag.h>
 
 #define NFS_NGROUPS	16
 
 struct unx_cred {
 	struct rpc_cred		uc_base;
+	ktag_t			uc_tag;
 	kgid_t			uc_gid;
 	kgid_t			uc_gids[NFS_NGROUPS];
 };
@@ -80,6 +82,7 @@ unx_create_cred(struct rpc_auth *auth, struct auth_cred *acred, int flags)
 		groups = NFS_NGROUPS;
 
 	cred->uc_gid = acred->gid;
+	cred->uc_tag = acred->tag;
 	for (i = 0; i < groups; i++)
 		cred->uc_gids[i] = GROUP_AT(acred->group_info, i);
 	if (i < NFS_NGROUPS)
@@ -121,7 +124,9 @@ unx_match(struct auth_cred *acred, struct rpc_cred *rcred, int flags)
 	unsigned int i;
 
 
-	if (!uid_eq(cred->uc_uid, acred->uid) || !gid_eq(cred->uc_gid, acred->gid))
+	if (!uid_eq(cred->uc_uid, acred->uid) ||
+	    !gid_eq(cred->uc_gid, acred->gid) ||
+	    !tag_eq(cred->uc_tag, acred->tag))
 		return 0;
 
 	if (acred->group_info != NULL)
@@ -146,7 +151,7 @@ unx_marshal(struct rpc_task *task, __be32 *p)
 	struct rpc_clnt	*clnt = task->tk_client;
 	struct unx_cred	*cred = container_of(task->tk_rqstp->rq_cred, struct unx_cred, uc_base);
 	__be32		*base, *hold;
-	int		i;
+	int		i, tag;
 
 	*p++ = htonl(RPC_AUTH_UNIX);
 	base = p++;
@@ -157,8 +162,11 @@ unx_marshal(struct rpc_task *task, __be32 *p)
 	 */
 	p = xdr_encode_array(p, clnt->cl_nodename, clnt->cl_nodelen);
 
-	*p++ = htonl((u32) from_kuid(&init_user_ns, cred->uc_uid));
-	*p++ = htonl((u32) from_kgid(&init_user_ns, cred->uc_gid));
+	tag = task->tk_client->cl_tag;
+	*p++ = htonl((u32) from_kuid(&init_user_ns,
+		TAGINO_KUID(tag, cred->uc_uid, cred->uc_tag)));
+	*p++ = htonl((u32) from_kgid(&init_user_ns,
+		TAGINO_KGID(tag, cred->uc_gid, cred->uc_tag)));
 	hold = p++;
 	for (i = 0; i < 16 && gid_valid(cred->uc_gids[i]); i++)
 		*p++ = htonl((u32) from_kgid(&init_user_ns, cred->uc_gids[i]));

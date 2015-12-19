@@ -739,6 +739,8 @@ config DUMMY_CONSOLE
 	depends on VGA_HOSE
 	default y
 
+source "kernel/vserver/Kconfig"
+
 source "security/Kconfig"
 
 source "crypto/Kconfig"

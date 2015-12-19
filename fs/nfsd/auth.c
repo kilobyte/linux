@@ -2,6 +2,7 @@
 
 #include <linux/sched.h>
 #include <linux/user_namespace.h>
+#include <linux/vs_tag.h>
 #include "nfsd.h"
 #include "auth.h"
 
@@ -37,6 +38,9 @@ int nfsd_setuser(struct svc_rqst *rqstp, struct svc_export *exp)
 
 	new->fsuid = rqstp->rq_cred.cr_uid;
 	new->fsgid = rqstp->rq_cred.cr_gid;
+	/* FIXME: this desperately needs a tag :)
+	new->xid = (vxid_t)INOTAG_TAG(DX_TAG_NFSD, cred.cr_uid, cred.cr_gid, 0);
+			*/
 
 	rqgi = rqstp->rq_cred.cr_group_info;
 

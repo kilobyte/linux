@@ -58,6 +58,7 @@
 #include <net/netevent.h>
 #include <net/netlink.h>
 #include <net/nexthop.h>
+#include <linux/vs_inet6.h>
 
 #include <asm/uaccess.h>
 
@@ -2212,15 +2213,17 @@ int ip6_route_get_saddr(struct net *net,
 			struct rt6_info *rt,
 			const struct in6_addr *daddr,
 			unsigned int prefs,
-			struct in6_addr *saddr)
+			struct in6_addr *saddr,
+			struct nx_info *nxi)
 {
 	struct inet6_dev *idev = ip6_dst_idev((struct dst_entry*)rt);
 	int err = 0;
-	if (rt->rt6i_prefsrc.plen)
+	if (rt->rt6i_prefsrc.plen && (!nxi ||
+	    v6_addr_in_nx_info(nxi, &rt->rt6i_prefsrc.addr, NXA_TYPE_ADDR)))
 		*saddr = rt->rt6i_prefsrc.addr;
 	else
 		err = ipv6_dev_get_saddr(net, idev ? idev->dev : NULL,
-					 daddr, prefs, saddr);
+					 daddr, prefs, saddr, nxi);
 	return err;
 }
 
@@ -2640,7 +2643,8 @@ static int rt6_fill_node(struct net *net,
 				goto nla_put_failure;
 	} else if (dst) {
 		struct in6_addr saddr_buf;
-		if (ip6_route_get_saddr(net, rt, dst, 0, &saddr_buf) == 0 &&
+		if (ip6_route_get_saddr(net, rt, dst, 0, &saddr_buf,
+		    (skb->sk ? skb->sk->sk_nx_info : NULL)) == 0 &&
 		    nla_put(skb, RTA_PREFSRC, 16, &saddr_buf))
 			goto nla_put_failure;
 	}

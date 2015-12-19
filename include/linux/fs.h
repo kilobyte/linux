@@ -216,6 +216,7 @@ typedef void (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 #define ATTR_KILL_PRIV	(1 << 14)
 #define ATTR_OPEN	(1 << 15) /* Truncating from open(O_TRUNC) */
 #define ATTR_TIMES_SET	(1 << 16)
+#define ATTR_TAG	(1 << 17)
 
 /*
  * This is the Inode Attributes structure, used for notify_change().  It
@@ -231,6 +232,7 @@ struct iattr {
 	umode_t		ia_mode;
 	kuid_t		ia_uid;
 	kgid_t		ia_gid;
+	ktag_t		ia_tag;
 	loff_t		ia_size;
 	struct timespec	ia_atime;
 	struct timespec	ia_mtime;
@@ -529,7 +531,9 @@ struct inode {
 	unsigned short		i_opflags;
 	kuid_t			i_uid;
 	kgid_t			i_gid;
-	unsigned int		i_flags;
+	ktag_t			i_tag;
+	unsigned short		i_flags;
+	unsigned short		i_vflags;
 
 #ifdef CONFIG_FS_POSIX_ACL
 	struct posix_acl	*i_acl;
@@ -558,6 +562,7 @@ struct inode {
 		unsigned int __i_nlink;
 	};
 	dev_t			i_rdev;
+	dev_t			i_mdev;
 	loff_t			i_size;
 	struct timespec		i_atime;
 	struct timespec		i_mtime;
@@ -716,6 +721,11 @@ static inline gid_t i_gid_read(const struct inode *inode)
 	return from_kgid(&init_user_ns, inode->i_gid);
 }
 
+static inline vtag_t i_tag_read(const struct inode *inode)
+{
+	return from_ktag(&init_user_ns, inode->i_tag);
+}
+
 static inline void i_uid_write(struct inode *inode, uid_t uid)
 {
 	inode->i_uid = make_kuid(&init_user_ns, uid);
@@ -726,14 +736,19 @@ static inline void i_gid_write(struct inode *inode, gid_t gid)
 	inode->i_gid = make_kgid(&init_user_ns, gid);
 }
 
+static inline void i_tag_write(struct inode *inode, vtag_t tag)
+{
+	inode->i_tag = make_ktag(&init_user_ns, tag);
+}
+
 static inline unsigned iminor(const struct inode *inode)
 {
-	return MINOR(inode->i_rdev);
+	return MINOR(inode->i_mdev);
 }
 
 static inline unsigned imajor(const struct inode *inode)
 {
-	return MAJOR(inode->i_rdev);
+	return MAJOR(inode->i_mdev);
 }
 
 extern struct block_device *I_BDEV(struct inode *inode);
@@ -794,6 +809,7 @@ struct file {
 	loff_t			f_pos;
 	struct fown_struct	f_owner;
 	const struct cred	*f_cred;
+	vxid_t			f_xid;
 	struct file_ra_state	f_ra;
 
 	u64			f_version;
@@ -966,6 +982,7 @@ struct file_lock {
 	struct file *fl_file;
 	loff_t fl_start;
 	loff_t fl_end;
+	vxid_t fl_xid;
 
 	struct fasync_struct *	fl_fasync; /* for lease break notifications */
 	/* for lease breaks: */
@@ -1577,6 +1594,7 @@ struct inode_operations {
 	ssize_t (*getxattr) (struct dentry *, const char *, void *, size_t);
 	ssize_t (*listxattr) (struct dentry *, char *, size_t);
 	int (*removexattr) (struct dentry *, const char *);
+	int (*sync_flags) (struct inode *, int, int);
 	int (*fiemap)(struct inode *, struct fiemap_extent_info *, u64 start,
 		      u64 len);
 	int (*update_time)(struct inode *, struct timespec *, int);
@@ -1591,6 +1609,7 @@ ssize_t rw_copy_check_uvector(int type, const struct iovec __user * uvector,
 			      unsigned long nr_segs, unsigned long fast_segs,
 			      struct iovec *fast_pointer,
 			      struct iovec **ret_pointer);
+ssize_t vfs_sendfile(struct file *, struct file *, loff_t *, size_t, loff_t);
 
 extern ssize_t vfs_read(struct file *, char __user *, size_t, loff_t *);
 extern ssize_t vfs_write(struct file *, const char __user *, size_t, loff_t *);
@@ -1644,6 +1663,14 @@ struct super_operations {
 #define S_IMA		1024	/* Inode has an associated IMA struct */
 #define S_AUTOMOUNT	2048	/* Automount/referral quasi-directory */
 #define S_NOSEC		4096	/* no suid or xattr security attributes */
+#define S_IXUNLINK	8192	/* Immutable Invert on unlink */
+
+/* Linux-VServer related Inode flags */
+
+#define V_VALID		1
+#define V_XATTR		2
+#define V_BARRIER	4	/* Barrier for chroot() */
+#define V_COW		8	/* Copy on Write */
 
 /*
  * Note that nosuid etc flags are inode-specific: setting some file-system
@@ -1668,10 +1695,13 @@ struct super_operations {
 #define IS_MANDLOCK(inode)	__IS_FLG(inode, MS_MANDLOCK)
 #define IS_NOATIME(inode)	__IS_FLG(inode, MS_RDONLY|MS_NOATIME)
 #define IS_I_VERSION(inode)	__IS_FLG(inode, MS_I_VERSION)
+#define IS_TAGGED(inode)	__IS_FLG(inode, MS_TAGGED)
 
 #define IS_NOQUOTA(inode)	((inode)->i_flags & S_NOQUOTA)
 #define IS_APPEND(inode)	((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode)	((inode)->i_flags & S_IMMUTABLE)
+#define IS_IXUNLINK(inode)	((inode)->i_flags & S_IXUNLINK)
+#define IS_IXORUNLINK(inode)	((IS_IXUNLINK(inode) ? S_IMMUTABLE : 0) ^ IS_IMMUTABLE(inode))
 #define IS_POSIXACL(inode)	__IS_FLG(inode, MS_POSIXACL)
 
 #define IS_DEADDIR(inode)	((inode)->i_flags & S_DEAD)
@@ -1681,6 +1711,16 @@ struct super_operations {
 #define IS_IMA(inode)		((inode)->i_flags & S_IMA)
 #define IS_AUTOMOUNT(inode)	((inode)->i_flags & S_AUTOMOUNT)
 #define IS_NOSEC(inode)		((inode)->i_flags & S_NOSEC)
+
+#define IS_BARRIER(inode)	(S_ISDIR((inode)->i_mode) && ((inode)->i_vflags & V_BARRIER))
+
+#ifdef CONFIG_VSERVER_COWBL
+#  define IS_COW(inode)		(IS_IXUNLINK(inode) && IS_IMMUTABLE(inode))
+#  define IS_COW_LINK(inode)	(S_ISREG((inode)->i_mode) && ((inode)->i_nlink > 1))
+#else
+#  define IS_COW(inode)		(0)
+#  define IS_COW_LINK(inode)	(0)
+#endif
 
 /*
  * Inode state bits.  Protected by inode->i_lock
@@ -1924,6 +1964,9 @@ extern struct kobject *fs_kobj;
 #ifdef CONFIG_FILE_LOCKING
 extern int locks_mandatory_locked(struct inode *);
 extern int locks_mandatory_area(int, struct inode *, struct file *, loff_t, size_t);
+
+#define ATTR_FLAG_BARRIER	512	/* Barrier for chroot() */
+#define ATTR_FLAG_IXUNLINK	1024	/* Immutable invert on unlink */
 
 /*
  * Candidates for mandatory locking have the setgid bit set
@@ -2617,6 +2660,7 @@ extern int dcache_dir_open(struct inode *, struct file *);
 extern int dcache_dir_close(struct inode *, struct file *);
 extern loff_t dcache_dir_lseek(struct file *, loff_t, int);
 extern int dcache_readdir(struct file *, struct dir_context *);
+extern int dcache_readdir_filter(struct file *, struct dir_context *, int (*)(struct dentry *));
 extern int simple_setattr(struct dentry *, struct iattr *);
 extern int simple_getattr(struct vfsmount *, struct dentry *, struct kstat *);
 extern int simple_statfs(struct dentry *, struct kstatfs *);

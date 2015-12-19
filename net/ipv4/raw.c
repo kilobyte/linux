@@ -116,7 +116,7 @@ static struct sock *__raw_v4_lookup(struct net *net, struct sock *sk,
 
 		if (net_eq(sock_net(sk), net) && inet->inet_num == num	&&
 		    !(inet->inet_daddr && inet->inet_daddr != raddr) 	&&
-		    !(inet->inet_rcv_saddr && inet->inet_rcv_saddr != laddr) &&
+		    v4_sock_addr_match(sk->sk_nx_info, inet, laddr)	&&
 		    !(sk->sk_bound_dev_if && sk->sk_bound_dev_if != dif))
 			goto found; /* gotcha */
 	}
@@ -397,6 +397,12 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 		icmp_out_count(net, ((struct icmphdr *)
 			skb_transport_header(skb))->type);
 
+	err = -EPERM;
+	if (!nx_check(0, VS_ADMIN) && !capable(CAP_NET_RAW) &&
+		sk->sk_nx_info &&
+		!v4_addr_in_nx_info(sk->sk_nx_info, iph->saddr, NXA_MASK_BIND))
+		goto error_free;
+
 	err = NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_OUT, skb, NULL,
 		      rt->dst.dev, dst_output);
 	if (err > 0)
@@ -585,6 +591,16 @@ static int raw_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 			goto done;
 	}
 
+	if (sk->sk_nx_info) {
+		rt = ip_v4_find_src(sock_net(sk), sk->sk_nx_info, &fl4);
+		if (IS_ERR(rt)) {
+			err = PTR_ERR(rt);
+			rt = NULL;
+			goto done;
+		}
+		ip_rt_put(rt);
+	}
+
 	security_sk_classify_flow(sk, flowi4_to_flowi(&fl4));
 	rt = ip_route_output_flow(sock_net(sk), &fl4, sk);
 	if (IS_ERR(rt)) {
@@ -661,17 +677,19 @@ static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct inet_sock *inet = inet_sk(sk);
 	struct sockaddr_in *addr = (struct sockaddr_in *) uaddr;
+	struct nx_v4_sock_addr nsa = { 0 };
 	int ret = -EINVAL;
 	int chk_addr_ret;
 
 	if (sk->sk_state != TCP_CLOSE || addr_len < sizeof(struct sockaddr_in))
 		goto out;
-	chk_addr_ret = inet_addr_type(sock_net(sk), addr->sin_addr.s_addr);
+	v4_map_sock_addr(inet, addr, &nsa);
+	chk_addr_ret = inet_addr_type(sock_net(sk), nsa.saddr);
 	ret = -EADDRNOTAVAIL;
-	if (addr->sin_addr.s_addr && chk_addr_ret != RTN_LOCAL &&
+	if (nsa.saddr && chk_addr_ret != RTN_LOCAL &&
 	    chk_addr_ret != RTN_MULTICAST && chk_addr_ret != RTN_BROADCAST)
 		goto out;
-	inet->inet_rcv_saddr = inet->inet_saddr = addr->sin_addr.s_addr;
+	v4_set_sock_addr(inet, &nsa);
 	if (chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		inet->inet_saddr = 0;  /* Use device */
 	sk_dst_reset(sk);
@@ -720,7 +738,8 @@ static int raw_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	/* Copy the address. */
 	if (sin) {
 		sin->sin_family = AF_INET;
-		sin->sin_addr.s_addr = ip_hdr(skb)->saddr;
+		sin->sin_addr.s_addr =
+			nx_map_sock_lback(sk->sk_nx_info, ip_hdr(skb)->saddr);
 		sin->sin_port = 0;
 		memset(&sin->sin_zero, 0, sizeof(sin->sin_zero));
 		*addr_len = sizeof(*sin);
@@ -916,7 +935,8 @@ static struct sock *raw_get_first(struct seq_file *seq)
 	for (state->bucket = 0; state->bucket < RAW_HTABLE_SIZE;
 			++state->bucket) {
 		sk_for_each(sk, &state->h->ht[state->bucket])
-			if (sock_net(sk) == seq_file_net(seq))
+			if ((sock_net(sk) == seq_file_net(seq)) &&
+			    nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
 				goto found;
 	}
 	sk = NULL;
@@ -932,7 +952,8 @@ static struct sock *raw_get_next(struct seq_file *seq, struct sock *sk)
 		sk = sk_next(sk);
 try_again:
 		;
-	} while (sk && sock_net(sk) != seq_file_net(seq));
+	} while (sk && ((sock_net(sk) != seq_file_net(seq)) ||
+		!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT)));
 
 	if (!sk && ++state->bucket < RAW_HTABLE_SIZE) {
 		sk = sk_head(&state->h->ht[state->bucket]);

@@ -55,6 +55,7 @@
 #include <linux/parser.h>
 #include <linux/nsproxy.h>
 #include <linux/rcupdate.h>
+#include <linux/vs_tag.h>
 
 #include <asm/uaccess.h>
 
@@ -103,6 +104,7 @@ enum {
 	Opt_mountport,
 	Opt_mountvers,
 	Opt_minorversion,
+	Opt_tagid,
 
 	/* Mount options that take string arguments */
 	Opt_nfsvers,
@@ -114,6 +116,9 @@ enum {
 
 	/* Special mount options */
 	Opt_userspace, Opt_deprecated, Opt_sloppy,
+
+	/* Linux-VServer tagging options */
+	Opt_tag, Opt_notag,
 
 	Opt_err
 };
@@ -183,6 +188,10 @@ static const match_table_t nfs_mount_option_tokens = {
 	{ Opt_lookupcache, "lookupcache=%s" },
 	{ Opt_fscache_uniq, "fsc=%s" },
 	{ Opt_local_lock, "local_lock=%s" },
+
+	{ Opt_tag, "tag" },
+	{ Opt_notag, "notag" },
+	{ Opt_tagid, "tagid=%u" },
 
 	/* The following needs to be listed after all other options */
 	{ Opt_nfsvers, "v%s" },
@@ -638,6 +647,7 @@ static void nfs_show_mount_options(struct seq_file *m, struct nfs_server *nfss,
 		{ NFS_MOUNT_NORDIRPLUS, ",nordirplus", "" },
 		{ NFS_MOUNT_UNSHARED, ",nosharecache", "" },
 		{ NFS_MOUNT_NORESVPORT, ",noresvport", "" },
+		{ NFS_MOUNT_TAGGED, ",tag", "" },
 		{ 0, NULL, NULL }
 	};
 	const struct proc_nfs_info *nfs_infop;
@@ -1321,6 +1331,14 @@ static int nfs_parse_mount_options(char *raw,
 		case Opt_nomigration:
 			mnt->options &= NFS_OPTION_MIGRATION;
 			break;
+#ifndef CONFIG_TAGGING_NONE
+		case Opt_tag:
+			mnt->flags |= NFS_MOUNT_TAGGED;
+			break;
+		case Opt_notag:
+			mnt->flags &= ~NFS_MOUNT_TAGGED;
+			break;
+#endif
 
 		/*
 		 * options that take numeric values
@@ -1407,6 +1425,12 @@ static int nfs_parse_mount_options(char *raw,
 				goto out_invalid_value;
 			mnt->minorversion = option;
 			break;
+#ifdef CONFIG_PROPAGATE
+		case Opt_tagid:
+			/* use args[0] */
+			nfs_data.flags |= NFS_MOUNT_TAGGED;
+			break;
+#endif
 
 		/*
 		 * options that take text values

@@ -34,6 +34,8 @@
 #include <linux/cleancache.h>
 #include <linux/fsnotify.h>
 #include <linux/lockdep.h>
+#include <linux/magic.h>
+#include <linux/vs_context.h>
 #include "internal.h"
 
 
@@ -1106,6 +1108,13 @@ mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 	WARN_ON(!sb->s_bdi);
 	WARN_ON(sb->s_bdi == &default_backing_dev_info);
 	sb->s_flags |= MS_BORN;
+
+	error = -EPERM;
+	if (!vx_capable(CAP_SYS_ADMIN, VXC_BINARY_MOUNT) &&
+		!sb->s_bdev &&
+		(sb->s_magic != PROC_SUPER_MAGIC) &&
+		(sb->s_magic != DEVPTS_SUPER_MAGIC))
+		goto out_sb;
 
 	error = security_sb_kern_mount(sb, flags, secdata);
 	if (error)

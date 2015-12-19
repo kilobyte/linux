@@ -82,6 +82,8 @@
 #include <linux/ptrace.h>
 #include <linux/tracehook.h>
 #include <linux/user_namespace.h>
+#include <linux/vs_context.h>
+#include <linux/vs_network.h>
 
 #include <asm/pgtable.h>
 #include <asm/processor.h>
@@ -164,6 +166,9 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 	rcu_read_lock();
 	ppid = pid_alive(p) ?
 		task_tgid_nr_ns(rcu_dereference(p->real_parent), ns) : 0;
+	if (unlikely(vx_current_initpid(p->pid)))
+		ppid = 0;
+
 	tpid = 0;
 	if (pid_alive(p)) {
 		struct task_struct *tracer = ptrace_parent(p);
@@ -290,7 +295,7 @@ static inline void task_sig(struct seq_file *m, struct task_struct *p)
 }
 
 static void render_cap_t(struct seq_file *m, const char *header,
-			kernel_cap_t *a)
+			struct vx_info *vxi, kernel_cap_t *a)
 {
 	unsigned __capi;
 
@@ -315,10 +320,11 @@ static inline void task_cap(struct seq_file *m, struct task_struct *p)
 	cap_bset	= cred->cap_bset;
 	rcu_read_unlock();
 
-	render_cap_t(m, "CapInh:\t", &cap_inheritable);
-	render_cap_t(m, "CapPrm:\t", &cap_permitted);
-	render_cap_t(m, "CapEff:\t", &cap_effective);
-	render_cap_t(m, "CapBnd:\t", &cap_bset);
+	/* FIXME: maybe move the p->vx_info masking to __task_cred() ? */
+	render_cap_t(m, "CapInh:\t", p->vx_info, &cap_inheritable);
+	render_cap_t(m, "CapPrm:\t", p->vx_info, &cap_permitted);
+	render_cap_t(m, "CapEff:\t", p->vx_info, &cap_effective);
+	render_cap_t(m, "CapBnd:\t", p->vx_info, &cap_bset);
 }
 
 static inline void task_seccomp(struct seq_file *m, struct task_struct *p)
@@ -347,6 +353,43 @@ static void task_cpus_allowed(struct seq_file *m, struct task_struct *task)
 	seq_putc(m, '\n');
 }
 
+int proc_pid_nsproxy(struct seq_file *m, struct pid_namespace *ns,
+			struct pid *pid, struct task_struct *task)
+{
+	seq_printf(m,	"Proxy:\t%p(%c)\n"
+			"Count:\t%u\n"
+			"uts:\t%p(%c)\n"
+			"ipc:\t%p(%c)\n"
+			"mnt:\t%p(%c)\n"
+			"pid:\t%p(%c)\n"
+			"net:\t%p(%c)\n",
+			task->nsproxy,
+			(task->nsproxy == init_task.nsproxy ? 'I' : '-'),
+			atomic_read(&task->nsproxy->count),
+			task->nsproxy->uts_ns,
+			(task->nsproxy->uts_ns == init_task.nsproxy->uts_ns ? 'I' : '-'),
+			task->nsproxy->ipc_ns,
+			(task->nsproxy->ipc_ns == init_task.nsproxy->ipc_ns ? 'I' : '-'),
+			task->nsproxy->mnt_ns,
+			(task->nsproxy->mnt_ns == init_task.nsproxy->mnt_ns ? 'I' : '-'),
+			task->nsproxy->pid_ns_for_children,
+			(task->nsproxy->pid_ns_for_children ==
+				init_task.nsproxy->pid_ns_for_children ? 'I' : '-'),
+			task->nsproxy->net_ns,
+			(task->nsproxy->net_ns == init_task.nsproxy->net_ns ? 'I' : '-'));
+	return 0;
+}
+
+void task_vs_id(struct seq_file *m, struct task_struct *task)
+{
+	if (task_vx_flags(task, VXF_HIDE_VINFO, 0))
+		return;
+
+	seq_printf(m, "VxID:\t%d\n", vx_task_xid(task));
+	seq_printf(m, "NxID:\t%d\n", nx_task_nid(task));
+}
+
+
 int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 			struct pid *pid, struct task_struct *task)
 {
@@ -364,6 +407,7 @@ int proc_pid_status(struct seq_file *m, struct pid_namespace *ns,
 	task_seccomp(m, task);
 	task_cpus_allowed(m, task);
 	cpuset_task_status_allowed(m, task);
+	task_vs_id(m, task);
 	task_context_switch_counts(m, task);
 	return 0;
 }
@@ -471,6 +515,17 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 				+ task->real_start_time.tv_nsec;
 	/* convert nsec -> ticks */
 	start_time = nsec_to_clock_t(start_time);
+
+	/* fixup start time for virt uptime */
+	if (vx_flags(VXF_VIRT_UPTIME, 0)) {
+		unsigned long long bias =
+			current->vx_info->cvirt.bias_clock;
+
+		if (start_time > bias)
+			start_time -= bias;
+		else
+			start_time = 0;
+	}
 
 	seq_printf(m, "%d (%s) %c", pid_nr_ns(pid, ns), tcomm, state);
 	seq_put_decimal_ll(m, ' ', ppid);

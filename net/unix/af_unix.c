@@ -117,6 +117,8 @@
 #include <net/checksum.h>
 #include <linux/security.h>
 #include <linux/freezer.h>
+#include <linux/vs_context.h>
+#include <linux/vs_limit.h>
 
 struct hlist_head unix_socket_table[2 * UNIX_HASH_SIZE];
 EXPORT_SYMBOL_GPL(unix_socket_table);
@@ -272,6 +274,8 @@ static struct sock *__unix_find_socket_byname(struct net *net,
 		if (!net_eq(sock_net(s), net))
 			continue;
 
+		if (!nx_check(s->sk_nid, VS_WATCH_P | VS_IDENT))
+			continue;
 		if (u->addr->len == len &&
 		    !memcmp(u->addr->name, sunname, len))
 			goto found;
@@ -2453,6 +2457,8 @@ static struct sock *unix_from_bucket(struct seq_file *seq, loff_t *pos)
 	for (sk = sk_head(&unix_socket_table[bucket]); sk; sk = sk_next(sk)) {
 		if (sock_net(sk) != seq_file_net(seq))
 			continue;
+		if (!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
+			continue;
 		if (++count == offset)
 			break;
 	}
@@ -2470,6 +2476,8 @@ static struct sock *unix_next_socket(struct seq_file *seq,
 		sk = sk_next(sk);
 		if (!sk)
 			goto next_bucket;
+		if (!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
+			continue;
 		if (sock_net(sk) == seq_file_net(seq))
 			return sk;
 	}

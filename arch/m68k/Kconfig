@@ -159,6 +159,8 @@ source "fs/Kconfig"
 
 source "arch/m68k/Kconfig.debug"
 
+source "kernel/vserver/Kconfig"
+
 source "security/Kconfig"
 
 source "crypto/Kconfig"

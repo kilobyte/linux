@@ -144,6 +144,7 @@ extern void exit_creds(struct task_struct *);
 extern int copy_creds(struct task_struct *, unsigned long);
 extern const struct cred *get_task_cred(struct task_struct *);
 extern struct cred *cred_alloc_blank(void);
+extern struct cred *__prepare_creds(const struct cred *);
 extern struct cred *prepare_creds(void);
 extern struct cred *prepare_exec_creds(void);
 extern int commit_creds(struct cred *);
@@ -196,6 +197,31 @@ static inline void validate_process_creds(void)
 {
 }
 #endif
+
+static inline void set_cred_subscribers(struct cred *cred, int n)
+{
+#ifdef CONFIG_DEBUG_CREDENTIALS
+	atomic_set(&cred->subscribers, n);
+#endif
+}
+
+static inline int read_cred_subscribers(const struct cred *cred)
+{
+#ifdef CONFIG_DEBUG_CREDENTIALS
+	return atomic_read(&cred->subscribers);
+#else
+	return 0;
+#endif
+}
+
+static inline void alter_cred_subscribers(const struct cred *_cred, int n)
+{
+#ifdef CONFIG_DEBUG_CREDENTIALS
+	struct cred *cred = (struct cred *) _cred;
+
+	atomic_add(n, &cred->subscribers);
+#endif
+}
 
 /**
  * get_new_cred - Get a reference on a new set of credentials

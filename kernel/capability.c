@@ -15,6 +15,7 @@
 #include <linux/syscalls.h>
 #include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
+#include <linux/vs_context.h>
 #include <asm/uaccess.h>
 
 /*
@@ -115,6 +116,7 @@ static int cap_validate_magic(cap_user_header_t header, unsigned *tocopy)
 
 	return 0;
 }
+
 
 /*
  * The only thing that can change the capabilities of the current
@@ -352,6 +354,8 @@ bool has_ns_capability_noaudit(struct task_struct *t,
 
 	return (ret == 0);
 }
+
+#include <linux/vserver/base.h>
 
 /**
  * has_capability_noaudit - Does a task have a capability (unaudited) in the

@@ -22,6 +22,7 @@
 #include <linux/tick.h>
 #include <linux/stop_machine.h>
 #include <linux/pvclock_gtod.h>
+#include <linux/vs_time.h>
 
 #include "tick-internal.h"
 #include "ntp_internal.h"
@@ -710,6 +711,7 @@ void getrawmonotonic(struct timespec *ts)
 	} while (read_seqcount_retry(&timekeeper_seq, seq));
 
 	timespec_add_ns(ts, nsecs);
+	vx_adjust_timespec(ts);
 }
 EXPORT_SYMBOL(getrawmonotonic);
 

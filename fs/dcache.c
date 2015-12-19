@@ -38,6 +38,7 @@
 #include <linux/prefetch.h>
 #include <linux/ratelimit.h>
 #include <linux/list_lru.h>
+#include <linux/vs_limit.h>
 #include "internal.h"
 #include "mount.h"
 
@@ -653,6 +654,8 @@ int d_invalidate(struct dentry * dentry)
 		spin_lock(&dentry->d_lock);
 	}
 
+	vx_dentry_dec(dentry);
+
 	/*
 	 * Somebody else still using it?
 	 *
@@ -682,6 +685,7 @@ EXPORT_SYMBOL(d_invalidate);
 static inline void __dget_dlock(struct dentry *dentry)
 {
 	dentry->d_lockref.count++;
+	vx_dentry_inc(dentry);
 }
 
 static inline void __dget(struct dentry *dentry)
@@ -1435,6 +1439,9 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	struct dentry *dentry;
 	char *dname;
 
+	if (!vx_dentry_avail(1))
+		return NULL;
+
 	dentry = kmem_cache_alloc(dentry_cache, GFP_KERNEL);
 	if (!dentry)
 		return NULL;
@@ -1467,6 +1474,7 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 
 	dentry->d_lockref.count = 1;
 	dentry->d_flags = 0;
+	vx_dentry_inc(dentry);
 	spin_lock_init(&dentry->d_lock);
 	seqcount_init(&dentry->d_seq);
 	dentry->d_inode = NULL;
@@ -2229,6 +2237,7 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 		}
 
 		dentry->d_lockref.count++;
+		vx_dentry_inc(dentry);
 		found = dentry;
 		spin_unlock(&dentry->d_lock);
 		break;

@@ -18,6 +18,7 @@
 
 #include <linux/fs.h>
 #include <linux/quotaops.h>
+#include <linux/vs_tag.h>
 #include "jfs_incore.h"
 #include "jfs_inode.h"
 #include "jfs_filsys.h"
@@ -30,29 +31,46 @@ void jfs_set_inode_flags(struct inode *inode)
 {
 	unsigned int flags = JFS_IP(inode)->mode2;
 
-	inode->i_flags &= ~(S_IMMUTABLE | S_APPEND |
-		S_NOATIME | S_DIRSYNC | S_SYNC);
+	inode->i_flags &= ~(S_IMMUTABLE | S_IXUNLINK |
+		S_SYNC | S_APPEND | S_NOATIME | S_DIRSYNC);
 
 	if (flags & JFS_IMMUTABLE_FL)
 		inode->i_flags |= S_IMMUTABLE;
+	if (flags & JFS_IXUNLINK_FL)
+		inode->i_flags |= S_IXUNLINK;
+
+	if (flags & JFS_SYNC_FL)
+		inode->i_flags |= S_SYNC;
 	if (flags & JFS_APPEND_FL)
 		inode->i_flags |= S_APPEND;
 	if (flags & JFS_NOATIME_FL)
 		inode->i_flags |= S_NOATIME;
 	if (flags & JFS_DIRSYNC_FL)
 		inode->i_flags |= S_DIRSYNC;
-	if (flags & JFS_SYNC_FL)
-		inode->i_flags |= S_SYNC;
+
+	inode->i_vflags &= ~(V_BARRIER | V_COW);
+
+	if (flags & JFS_BARRIER_FL)
+		inode->i_vflags |= V_BARRIER;
+	if (flags & JFS_COW_FL)
+		inode->i_vflags |= V_COW;
 }
 
 void jfs_get_inode_flags(struct jfs_inode_info *jfs_ip)
 {
 	unsigned int flags = jfs_ip->vfs_inode.i_flags;
+	unsigned int vflags = jfs_ip->vfs_inode.i_vflags;
 
-	jfs_ip->mode2 &= ~(JFS_IMMUTABLE_FL | JFS_APPEND_FL | JFS_NOATIME_FL |
-			   JFS_DIRSYNC_FL | JFS_SYNC_FL);
+	jfs_ip->mode2 &= ~(JFS_IMMUTABLE_FL | JFS_IXUNLINK_FL |
+			   JFS_APPEND_FL | JFS_NOATIME_FL |
+			   JFS_DIRSYNC_FL | JFS_SYNC_FL |
+			   JFS_BARRIER_FL | JFS_COW_FL);
+
 	if (flags & S_IMMUTABLE)
 		jfs_ip->mode2 |= JFS_IMMUTABLE_FL;
+	if (flags & S_IXUNLINK)
+		jfs_ip->mode2 |= JFS_IXUNLINK_FL;
+
 	if (flags & S_APPEND)
 		jfs_ip->mode2 |= JFS_APPEND_FL;
 	if (flags & S_NOATIME)
@@ -61,6 +79,11 @@ void jfs_get_inode_flags(struct jfs_inode_info *jfs_ip)
 		jfs_ip->mode2 |= JFS_DIRSYNC_FL;
 	if (flags & S_SYNC)
 		jfs_ip->mode2 |= JFS_SYNC_FL;
+
+	if (vflags & V_BARRIER)
+		jfs_ip->mode2 |= JFS_BARRIER_FL;
+	if (vflags & V_COW)
+		jfs_ip->mode2 |= JFS_COW_FL;
 }
 
 /*

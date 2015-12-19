@@ -8,6 +8,7 @@
 #define _LINUX_QUOTAOPS_
 
 #include <linux/fs.h>
+#include <linux/vs_dlimit.h>
 
 #define DQUOT_SPACE_WARN	0x1
 #define DQUOT_SPACE_RESERVE	0x2
@@ -207,11 +208,12 @@ static inline void dquot_drop(struct inode *inode)
 
 static inline int dquot_alloc_inode(const struct inode *inode)
 {
-	return 0;
+	return dl_alloc_inode(inode);
 }
 
 static inline void dquot_free_inode(const struct inode *inode)
 {
+	dl_free_inode(inode);
 }
 
 static inline int dquot_transfer(struct inode *inode, struct iattr *iattr)
@@ -222,6 +224,10 @@ static inline int dquot_transfer(struct inode *inode, struct iattr *iattr)
 static inline int __dquot_alloc_space(struct inode *inode, qsize_t number,
 		int flags)
 {
+	int ret = 0;
+
+	if ((ret = dl_alloc_space(inode, number)))
+		return ret;
 	if (!(flags & DQUOT_SPACE_RESERVE))
 		inode_add_bytes(inode, number);
 	return 0;
@@ -232,6 +238,7 @@ static inline void __dquot_free_space(struct inode *inode, qsize_t number,
 {
 	if (!(flags & DQUOT_SPACE_RESERVE))
 		inode_sub_bytes(inode, number);
+	dl_free_space(inode, number);
 }
 
 static inline int dquot_claim_space_nodirty(struct inode *inode, qsize_t number)

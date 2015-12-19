@@ -7,6 +7,7 @@
 #include "vfs.h"
 #include "xdr.h"
 #include "auth.h"
+#include <linux/vs_tag.h>
 
 #define NFSDDBG_FACILITY		NFSDDBG_XDR
 
@@ -89,6 +90,8 @@ static __be32 *
 decode_sattr(__be32 *p, struct iattr *iap)
 {
 	u32	tmp, tmp1;
+	kuid_t	kuid = GLOBAL_ROOT_UID;
+	kgid_t	kgid = GLOBAL_ROOT_GID;
 
 	iap->ia_valid = 0;
 
@@ -101,15 +104,18 @@ decode_sattr(__be32 *p, struct iattr *iap)
 		iap->ia_mode = tmp;
 	}
 	if ((tmp = ntohl(*p++)) != (u32)-1) {
-		iap->ia_uid = make_kuid(&init_user_ns, tmp);
+		kuid = make_kuid(&init_user_ns, tmp);
 		if (uid_valid(iap->ia_uid))
 			iap->ia_valid |= ATTR_UID;
 	}
 	if ((tmp = ntohl(*p++)) != (u32)-1) {
-		iap->ia_gid = make_kgid(&init_user_ns, tmp);
+		kgid = make_kgid(&init_user_ns, tmp);
 		if (gid_valid(iap->ia_gid))
 			iap->ia_valid |= ATTR_GID;
 	}
+	iap->ia_uid = INOTAG_KUID(DX_TAG_NFSD, kuid, kgid);
+	iap->ia_gid = INOTAG_KGID(DX_TAG_NFSD, kuid, kgid);
+	iap->ia_tag = INOTAG_KTAG(DX_TAG_NFSD, kuid, kgid, GLOBAL_ROOT_TAG);
 	if ((tmp = ntohl(*p++)) != (u32)-1) {
 		iap->ia_valid |= ATTR_SIZE;
 		iap->ia_size = tmp;
@@ -154,8 +160,10 @@ encode_fattr(struct svc_rqst *rqstp, __be32 *p, struct svc_fh *fhp,
 	*p++ = htonl(nfs_ftypes[type >> 12]);
 	*p++ = htonl((u32) stat->mode);
 	*p++ = htonl((u32) stat->nlink);
-	*p++ = htonl((u32) from_kuid(&init_user_ns, stat->uid));
-	*p++ = htonl((u32) from_kgid(&init_user_ns, stat->gid));
+	*p++ = htonl((u32) from_kuid(&init_user_ns,
+		TAGINO_KUID(DX_TAG(dentry->d_inode), stat->uid, stat->tag)));
+	*p++ = htonl((u32) from_kgid(&init_user_ns,
+		TAGINO_KGID(DX_TAG(dentry->d_inode), stat->gid, stat->tag)));
 
 	if (S_ISLNK(type) && stat->size > NFS_MAXPATHLEN) {
 		*p++ = htonl(NFS_MAXPATHLEN);

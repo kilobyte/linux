@@ -30,6 +30,7 @@
 #include <linux/icmpv6.h>
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv6.h>
+#include <linux/vs_inet6.h>
 #include <linux/skbuff.h>
 #include <linux/compat.h>
 #include <asm/uaccess.h>
@@ -289,6 +290,13 @@ static int rawv6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 						   sk->sk_bound_dev_if);
 			if (!dev)
 				goto out_unlock;
+		}
+
+		if (!v6_addr_in_nx_info(sk->sk_nx_info, &addr->sin6_addr, -1)) {
+			err = -EADDRNOTAVAIL;
+			if (dev)
+				dev_put(dev);
+			goto out;
 		}
 
 		/* ipv4 addr of the socket is invalid.  Only the

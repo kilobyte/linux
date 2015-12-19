@@ -1787,6 +1787,7 @@ static int ipv6_route_seq_show(struct seq_file *seq, void *v)
 	struct rt6_info *rt = v;
 	struct ipv6_route_iter *iter = seq->private;
 
+	/* FIXME: check for network context? */
 	seq_printf(seq, "%pi6 %02x ", &rt->rt6i_dst.addr, rt->rt6i_dst.plen);
 
 #ifdef CONFIG_IPV6_SUBTREES

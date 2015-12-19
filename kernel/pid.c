@@ -38,6 +38,7 @@
 #include <linux/syscalls.h>
 #include <linux/proc_ns.h>
 #include <linux/proc_fs.h>
+#include <linux/vs_pid.h>
 
 #define pid_hashfn(nr, ns)	\
 	hash_long((unsigned long)nr + (unsigned long)ns, pidhash_shift)
@@ -375,7 +376,7 @@ EXPORT_SYMBOL_GPL(find_pid_ns);
 
 struct pid *find_vpid(int nr)
 {
-	return find_pid_ns(nr, task_active_pid_ns(current));
+	return find_pid_ns(vx_rmap_pid(nr), task_active_pid_ns(current));
 }
 EXPORT_SYMBOL_GPL(find_vpid);
 
@@ -431,6 +432,9 @@ void transfer_pid(struct task_struct *old, struct task_struct *new,
 struct task_struct *pid_task(struct pid *pid, enum pid_type type)
 {
 	struct task_struct *result = NULL;
+
+	if (type == PIDTYPE_REALPID)
+		type = PIDTYPE_PID;
 	if (pid) {
 		struct hlist_node *first;
 		first = rcu_dereference_check(hlist_first_rcu(&pid->tasks[type]),
@@ -450,7 +454,7 @@ struct task_struct *find_task_by_pid_ns(pid_t nr, struct pid_namespace *ns)
 	rcu_lockdep_assert(rcu_read_lock_held(),
 			   "find_task_by_pid_ns() needs rcu_read_lock()"
 			   " protection");
-	return pid_task(find_pid_ns(nr, ns), PIDTYPE_PID);
+	return pid_task(find_pid_ns(vx_rmap_pid(nr), ns), PIDTYPE_PID);
 }
 
 struct task_struct *find_task_by_vpid(pid_t vnr)
@@ -494,7 +498,7 @@ struct pid *find_get_pid(pid_t nr)
 }
 EXPORT_SYMBOL_GPL(find_get_pid);
 
-pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns)
+pid_t pid_unmapped_nr_ns(struct pid *pid, struct pid_namespace *ns)
 {
 	struct upid *upid;
 	pid_t nr = 0;
@@ -507,6 +511,11 @@ pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns)
 	return nr;
 }
 EXPORT_SYMBOL_GPL(pid_nr_ns);
+
+pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns)
+{
+	return vx_map_pid(pid_unmapped_nr_ns(pid, ns));
+}
 
 pid_t pid_vnr(struct pid *pid)
 {

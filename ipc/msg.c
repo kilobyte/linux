@@ -37,6 +37,7 @@
 #include <linux/rwsem.h>
 #include <linux/nsproxy.h>
 #include <linux/ipc_namespace.h>
+#include <linux/vs_base.h>
 
 #include <asm/current.h>
 #include <asm/uaccess.h>
@@ -194,6 +195,7 @@ static int newque(struct ipc_namespace *ns, struct ipc_params *params)
 
 	msq->q_perm.mode = msgflg & S_IRWXUGO;
 	msq->q_perm.key = key;
+	msq->q_perm.xid = vx_current_xid();
 
 	msq->q_perm.security = NULL;
 	retval = security_msg_queue_alloc(msq);

@@ -8,6 +8,7 @@
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/slab.h>
+#include <linux/vs_context.h>
 #include <asm/current.h>
 #include <linux/uaccess.h>
 #include <linux/kernel.h>
@@ -38,7 +39,7 @@ static int check_quotactl_permission(struct super_block *sb, int type, int cmd,
 			break;
 		/*FALLTHROUGH*/
 	default:
-		if (!capable(CAP_SYS_ADMIN))
+		if (!vx_capable(CAP_SYS_ADMIN, VXC_QUOTA_CTL))
 			return -EPERM;
 	}
 
@@ -338,6 +339,46 @@ static int do_quotactl(struct super_block *sb, int type, int cmd, qid_t id,
 
 #ifdef CONFIG_BLOCK
 
+#if defined(CONFIG_BLK_DEV_VROOT) || defined(CONFIG_BLK_DEV_VROOT_MODULE)
+
+#include <linux/vroot.h>
+#include <linux/major.h>
+#include <linux/module.h>
+#include <linux/kallsyms.h>
+#include <linux/vserver/debug.h>
+
+static vroot_grb_func *vroot_get_real_bdev = NULL;
+
+static DEFINE_SPINLOCK(vroot_grb_lock);
+
+int register_vroot_grb(vroot_grb_func *func) {
+	int ret = -EBUSY;
+
+	spin_lock(&vroot_grb_lock);
+	if (!vroot_get_real_bdev) {
+		vroot_get_real_bdev = func;
+		ret = 0;
+	}
+	spin_unlock(&vroot_grb_lock);
+	return ret;
+}
+EXPORT_SYMBOL(register_vroot_grb);
+
+int unregister_vroot_grb(vroot_grb_func *func) {
+	int ret = -EINVAL;
+
+	spin_lock(&vroot_grb_lock);
+	if (vroot_get_real_bdev) {
+		vroot_get_real_bdev = NULL;
+		ret = 0;
+	}
+	spin_unlock(&vroot_grb_lock);
+	return ret;
+}
+EXPORT_SYMBOL(unregister_vroot_grb);
+
+#endif
+
 /* Return 1 if 'cmd' will block on frozen filesystem */
 static int quotactl_cmd_write(int cmd)
 {
@@ -373,6 +414,22 @@ static struct super_block *quotactl_block(const char __user *special, int cmd)
 	putname(tmp);
 	if (IS_ERR(bdev))
 		return ERR_CAST(bdev);
+#if defined(CONFIG_BLK_DEV_VROOT) || defined(CONFIG_BLK_DEV_VROOT_MODULE)
+	if (bdev && bdev->bd_inode &&
+		imajor(bdev->bd_inode) == VROOT_MAJOR) {
+		struct block_device *bdnew = (void *)-EINVAL;
+
+		if (vroot_get_real_bdev)
+			bdnew = vroot_get_real_bdev(bdev);
+		else
+			vxdprintk(VXD_CBIT(misc, 0),
+					"vroot_get_real_bdev not set");
+		bdput(bdev);
+		if (IS_ERR(bdnew))
+			return ERR_PTR(PTR_ERR(bdnew));
+		bdev = bdnew;
+	}
+#endif
 	if (quotactl_cmd_write(cmd))
 		sb = get_super_thawed(bdev);
 	else

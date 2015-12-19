@@ -22,6 +22,7 @@
 #include <linux/random.h>
 #include <linux/bitops.h>
 #include <linux/blkdev.h>
+#include <linux/vs_tag.h>
 #include <asm/byteorder.h>
 
 #include "ext4.h"
@@ -731,6 +732,7 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 		inode->i_mode = mode;
 		inode->i_uid = current_fsuid();
 		inode->i_gid = dir->i_gid;
+		i_tag_write(inode, dx_current_fstag(sb));
 	} else
 		inode_init_owner(inode, dir, mode);
 	dquot_initialize(inode);

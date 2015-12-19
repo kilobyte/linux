@@ -23,6 +23,9 @@
 #include <linux/slab.h>
 #include <linux/sysctl.h>
 #include <linux/workqueue.h>
+#include <linux/vs_limit.h>
+#include <linux/vs_socket.h>
+#include <linux/vs_context.h>
 #include <net/tcp.h>
 #include <net/inet_common.h>
 #include <net/xfrm.h>
@@ -289,6 +292,11 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 		tcptw->tw_ts_recent	= tp->rx_opt.ts_recent;
 		tcptw->tw_ts_recent_stamp = tp->rx_opt.ts_recent_stamp;
 		tcptw->tw_ts_offset	= tp->tsoffset;
+
+		tw->tw_xid		= sk->sk_xid;
+		tw->tw_vx_info		= NULL;
+		tw->tw_nid		= sk->sk_nid;
+		tw->tw_nx_info		= NULL;
 
 #if IS_ENABLED(CONFIG_IPV6)
 		if (tw->tw_family == PF_INET6) {

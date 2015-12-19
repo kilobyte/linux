@@ -693,7 +693,6 @@ ext2_try_to_allocate(struct super_block *sb, int group,
 			start = 0;
 		end = EXT2_BLOCKS_PER_GROUP(sb);
 	}
-
 	BUG_ON(start > EXT2_BLOCKS_PER_GROUP(sb));
 
 repeat:

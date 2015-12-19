@@ -14,6 +14,7 @@
 #include <linux/compat.h>
 #include <linux/mount.h>
 #include <linux/file.h>
+#include <linux/vs_tag.h>
 #include <asm/uaccess.h>
 #include "ext4_jbd2.h"
 #include "ext4.h"
@@ -210,6 +211,33 @@ swap_boot_out:
 	return err;
 }
 
+int ext4_sync_flags(struct inode *inode, int flags, int vflags)
+{
+	handle_t *handle = NULL;
+	struct ext4_iloc iloc;
+	int err;
+
+	handle = ext4_journal_start(inode, EXT4_HT_INODE, 1);
+	if (IS_ERR(handle))
+		return PTR_ERR(handle);
+
+	if (IS_SYNC(inode))
+		ext4_handle_sync(handle);
+	err = ext4_reserve_inode_write(handle, inode, &iloc);
+	if (err)
+		goto flags_err;
+
+	inode->i_flags = flags;
+	inode->i_vflags = vflags;
+	ext4_get_inode_flags(EXT4_I(inode));
+	inode->i_ctime = ext4_current_time(inode);
+
+	err = ext4_mark_iloc_dirty(handle, inode, &iloc);
+flags_err:
+	ext4_journal_stop(handle);
+	return err;
+}
+
 long ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -243,6 +271,11 @@ long ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		flags = ext4_mask_flags(inode->i_mode, flags);
 
+		if (IS_BARRIER(inode)) {
+			vxwprintk_task(1, "messing with the barrier.");
+			return -EACCES;
+		}
+
 		err = -EPERM;
 		mutex_lock(&inode->i_mutex);
 		/* Is it quota file? Do not allow user to mess with it */
@@ -260,7 +293,9 @@ long ext4_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		 *
 		 * This test looks nicer. Thanks to Pauline Middelink
 		 */
-		if ((flags ^ oldflags) & (EXT4_APPEND_FL | EXT4_IMMUTABLE_FL)) {
+		if ((oldflags & EXT4_IMMUTABLE_FL) ||
+			((flags ^ oldflags) & (EXT4_APPEND_FL |
+			EXT4_IMMUTABLE_FL | EXT4_IXUNLINK_FL))) {
 			if (!capable(CAP_LINUX_IMMUTABLE))
 				goto flags_out;
 		}

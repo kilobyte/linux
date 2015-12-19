@@ -1604,6 +1604,9 @@ int __dquot_alloc_space(struct inode *inode, qsize_t number, int flags)
 	struct dquot **dquots = inode->i_dquot;
 	int reserve = flags & DQUOT_SPACE_RESERVE;
 
+	if ((ret = dl_alloc_space(inode, number)))
+		return ret;
+
 	/*
 	 * First test before acquiring mutex - solves deadlocks when we
 	 * re-enter the quota code and are already holding the mutex
@@ -1658,6 +1661,9 @@ int dquot_alloc_inode(const struct inode *inode)
 	int cnt, ret = 0;
 	struct dquot_warn warn[MAXQUOTAS];
 	struct dquot * const *dquots = inode->i_dquot;
+
+	if ((ret = dl_alloc_inode(inode)))
+		return ret;
 
 	/* First test before acquiring mutex - solves deadlocks when we
          * re-enter the quota code and are already holding the mutex */
@@ -1759,6 +1765,8 @@ void __dquot_free_space(struct inode *inode, qsize_t number, int flags)
 	struct dquot **dquots = inode->i_dquot;
 	int reserve = flags & DQUOT_SPACE_RESERVE;
 
+	dl_free_space(inode, number);
+
 	/* First test before acquiring mutex - solves deadlocks when we
          * re-enter the quota code and are already holding the mutex */
 	if (!dquot_active(inode)) {
@@ -1802,6 +1810,8 @@ void dquot_free_inode(const struct inode *inode)
 	unsigned int cnt;
 	struct dquot_warn warn[MAXQUOTAS];
 	struct dquot * const *dquots = inode->i_dquot;
+
+	dl_free_inode(inode);
 
 	/* First test before acquiring mutex - solves deadlocks when we
          * re-enter the quota code and are already holding the mutex */

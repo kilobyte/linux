@@ -25,6 +25,7 @@ obj-y += printk/
 obj-y += cpu/
 obj-y += irq/
 obj-y += rcu/
+obj-y += vserver/
 
 obj-$(CONFIG_CHECKPOINT_RESTORE) += kcmp.o
 obj-$(CONFIG_FREEZER) += freezer.o

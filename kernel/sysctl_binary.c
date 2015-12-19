@@ -73,6 +73,7 @@ static const struct bin_table bin_kern_table[] = {
 
 	{ CTL_INT,	KERN_PANIC,			"panic" },
 	{ CTL_INT,	KERN_REALROOTDEV,		"real-root-dev" },
+	{ CTL_STR,	KERN_VSHELPER,			"vshelper" },
 
 	{ CTL_STR,	KERN_SPARC_REBOOT,		"reboot-cmd" },
 	{ CTL_INT,	KERN_CTLALTDEL,			"ctrl-alt-del" },

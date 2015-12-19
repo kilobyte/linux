@@ -77,7 +77,41 @@ static int ocfs2_get_inode_attr(struct inode *inode, unsigned *flags)
 	return status;
 }
 
-static int ocfs2_set_inode_attr(struct inode *inode, unsigned flags,
+int ocfs2_sync_flags(struct inode *inode, int flags, int vflags)
+{
+	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
+	struct buffer_head *bh = NULL;
+	handle_t *handle = NULL;
+	int status;
+
+	status = ocfs2_inode_lock(inode, &bh, 1);
+	if (status < 0) {
+		mlog_errno(status);
+		return status;
+	}
+	handle = ocfs2_start_trans(osb, OCFS2_INODE_UPDATE_CREDITS);
+	if (IS_ERR(handle)) {
+		status = PTR_ERR(handle);
+		mlog_errno(status);
+		goto bail_unlock;
+	}
+
+	inode->i_flags = flags;
+	inode->i_vflags = vflags;
+	ocfs2_get_inode_flags(OCFS2_I(inode));
+
+	status = ocfs2_mark_inode_dirty(handle, inode, bh);
+	if (status < 0)
+		mlog_errno(status);
+
+	ocfs2_commit_trans(osb, handle);
+bail_unlock:
+	ocfs2_inode_unlock(inode, 1);
+	brelse(bh);
+	return status;
+}
+
+int ocfs2_set_inode_attr(struct inode *inode, unsigned flags,
 				unsigned mask)
 {
 	struct ocfs2_inode_info *ocfs2_inode = OCFS2_I(inode);
@@ -115,6 +149,11 @@ static int ocfs2_set_inode_attr(struct inode *inode, unsigned flags,
 		(OCFS2_APPEND_FL | OCFS2_IMMUTABLE_FL))) {
 		if (!capable(CAP_LINUX_IMMUTABLE))
 			goto bail_unlock;
+	}
+
+	if (IS_BARRIER(inode)) {
+		vxwprintk_task(1, "messing with the barrier.");
+		goto bail_unlock;
 	}
 
 	handle = ocfs2_start_trans(osb, OCFS2_INODE_UPDATE_CREDITS);
@@ -881,6 +920,7 @@ int ocfs2_info_handle(struct inode *inode, struct ocfs2_info *info,
 bail:
 	return status;
 }
+
 
 long ocfs2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {

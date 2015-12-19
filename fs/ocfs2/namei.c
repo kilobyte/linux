@@ -41,6 +41,7 @@
 #include <linux/slab.h>
 #include <linux/highmem.h>
 #include <linux/quotaops.h>
+#include <linux/vs_tag.h>
 
 #include <cluster/masklog.h>
 
@@ -502,6 +503,7 @@ static int __ocfs2_mknod_locked(struct inode *dir,
 	struct ocfs2_dinode *fe = NULL;
 	struct ocfs2_extent_list *fel;
 	u16 feat;
+	ktag_t ktag;
 
 	*new_fe_bh = NULL;
 
@@ -539,8 +541,13 @@ static int __ocfs2_mknod_locked(struct inode *dir,
 	fe->i_suballoc_loc = cpu_to_le64(suballoc_loc);
 	fe->i_suballoc_bit = cpu_to_le16(suballoc_bit);
 	fe->i_suballoc_slot = cpu_to_le16(inode_ac->ac_alloc_slot);
-	fe->i_uid = cpu_to_le32(i_uid_read(inode));
-	fe->i_gid = cpu_to_le32(i_gid_read(inode));
+
+	ktag = make_ktag(&init_user_ns, dx_current_fstag(osb->sb));
+	fe->i_uid = cpu_to_le32(from_kuid(&init_user_ns,
+		TAGINO_KUID(DX_TAG(inode), inode->i_uid, ktag)));
+	fe->i_gid = cpu_to_le32(from_kgid(&init_user_ns,
+		TAGINO_KGID(DX_TAG(inode), inode->i_gid, ktag)));
+	inode->i_tag = ktag; /* is this correct? */
 	fe->i_mode = cpu_to_le16(inode->i_mode);
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		fe->id1.dev1.i_rdev = cpu_to_le64(huge_encode_dev(dev));

@@ -97,7 +97,7 @@ static int fib6_rule_action(struct fib_rule *rule, struct flowi *flp,
 					       ip6_dst_idev(&rt->dst)->dev,
 					       &flp6->daddr,
 					       rt6_flags2srcprefs(flags),
-					       &saddr))
+					       &saddr, NULL))
 				goto again;
 			if (!ipv6_prefix_equal(&saddr, &r->src.addr,
 					       r->src.plen))

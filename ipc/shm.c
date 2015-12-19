@@ -42,6 +42,8 @@
 #include <linux/nsproxy.h>
 #include <linux/mount.h>
 #include <linux/ipc_namespace.h>
+#include <linux/vs_context.h>
+#include <linux/vs_limit.h>
 
 #include <asm/uaccess.h>
 
@@ -209,10 +211,14 @@ static void shm_open(struct vm_area_struct *vma)
 static void shm_destroy(struct ipc_namespace *ns, struct shmid_kernel *shp)
 {
 	struct file *shm_file;
+	struct vx_info *vxi = lookup_vx_info(shp->shm_perm.xid);
+	int numpages = (shp->shm_segsz + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
 	shm_file = shp->shm_file;
 	shp->shm_file = NULL;
-	ns->shm_tot -= (shp->shm_segsz + PAGE_SIZE - 1) >> PAGE_SHIFT;
+	vx_ipcshm_sub(vxi, shp, numpages);
+	ns->shm_tot -= numpages;
+
 	shm_rmid(ns, shp);
 	shm_unlock(shp);
 	if (!is_file_hugepages(shm_file))
@@ -220,6 +226,7 @@ static void shm_destroy(struct ipc_namespace *ns, struct shmid_kernel *shp)
 	else if (shp->mlock_user)
 		user_shm_unlock(file_inode(shm_file)->i_size, shp->mlock_user);
 	fput(shm_file);
+	put_vx_info(vxi);
 	ipc_rcu_putref(shp, shm_rcu_free);
 }
 
@@ -496,11 +503,15 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 	if (ns->shm_tot + numpages > ns->shm_ctlall)
 		return -ENOSPC;
 
+	if (!vx_ipcshm_avail(current_vx_info(), numpages))
+		return -ENOSPC;
+
 	shp = ipc_rcu_alloc(sizeof(*shp));
 	if (!shp)
 		return -ENOMEM;
 
 	shp->shm_perm.key = key;
+	shp->shm_perm.xid = vx_current_xid();
 	shp->shm_perm.mode = (shmflg & S_IRWXUGO);
 	shp->mlock_user = NULL;
 
@@ -569,6 +580,7 @@ static int newseg(struct ipc_namespace *ns, struct ipc_params *params)
 
 	ipc_unlock_object(&shp->shm_perm);
 	rcu_read_unlock();
+	vx_ipcshm_add(current_vx_info(), key, numpages);
 	return error;
 
 no_id:

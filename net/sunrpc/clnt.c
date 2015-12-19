@@ -31,6 +31,7 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <linux/un.h>
+#include <linux/vs_cvirt.h>
 
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/addr.h>
@@ -540,6 +541,9 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 	if (!(args->flags & RPC_CLNT_CREATE_QUIET))
 		clnt->cl_chatty = 1;
 
+	/* TODO: handle RPC_CLNT_CREATE_TAGGED
+	if (args->flags & RPC_CLNT_CREATE_TAGGED)
+		clnt->cl_tag = 1; */
 	return clnt;
 }
 EXPORT_SYMBOL_GPL(rpc_create);

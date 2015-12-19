@@ -4,6 +4,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/static_key.h>
 #include <linux/context_tracking.h>
+#include <linux/vs_sched.h>
 #include "sched.h"
 
 
@@ -135,14 +136,17 @@ static inline void task_group_account_field(struct task_struct *p, int index,
 void account_user_time(struct task_struct *p, cputime_t cputime,
 		       cputime_t cputime_scaled)
 {
+	struct vx_info *vxi = p->vx_info;  /* p is _always_ current */
+	int nice = (TASK_NICE(p) > 0);
 	int index;
 
 	/* Add user time to process. */
 	p->utime += cputime;
 	p->utimescaled += cputime_scaled;
+	vx_account_user(vxi, cputime, nice);
 	account_group_user_time(p, cputime);
 
-	index = (TASK_NICE(p) > 0) ? CPUTIME_NICE : CPUTIME_USER;
+	index = (nice) ? CPUTIME_NICE : CPUTIME_USER;
 
 	/* Add user time to cpustat. */
 	task_group_account_field(p, index, (__force u64) cputime);
@@ -189,9 +193,12 @@ static inline
 void __account_system_time(struct task_struct *p, cputime_t cputime,
 			cputime_t cputime_scaled, int index)
 {
+	struct vx_info *vxi = p->vx_info;  /* p is _always_ current */
+
 	/* Add system time to process. */
 	p->stime += cputime;
 	p->stimescaled += cputime_scaled;
+	vx_account_system(vxi, cputime, 0 /* do we have idle time? */);
 	account_group_system_time(p, cputime);
 
 	/* Add system time to cpustat. */

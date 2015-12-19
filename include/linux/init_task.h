@@ -234,6 +234,10 @@ extern struct task_group root_task_group;
 	INIT_CPUSET_SEQ(tsk)						\
 	INIT_RT_MUTEXES(tsk)						\
 	INIT_VTIME(tsk)							\
+	.xid		= 0,						\
+	.vx_info	= NULL,						\
+	.nid		= 0,						\
+	.nx_info	= NULL,						\
 }
 
 

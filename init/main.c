@@ -77,6 +77,7 @@
 #include <linux/sched_clock.h>
 #include <linux/context_tracking.h>
 #include <linux/random.h>
+#include <linux/vserver/percpu.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>

@@ -39,6 +39,7 @@
 #include <asm/tlbflush.h>
 #include <linux/swapops.h>
 #include <linux/page_cgroup.h>
+#include <linux/vs_base.h>
 
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
@@ -2052,6 +2053,16 @@ static int swap_show(struct seq_file *swap, void *v)
 
 	if (si == SEQ_START_TOKEN) {
 		seq_puts(swap,"Filename\t\t\t\tType\t\tSize\tUsed\tPriority\n");
+		if (vx_flags(VXF_VIRT_MEM, 0)) {
+			struct sysinfo si;
+
+			vx_vsi_swapinfo(&si);
+			if (si.totalswap < (1 << 10))
+				return 0;
+			seq_printf(swap, "%s\t\t\t\t\t%s\t%lu\t%lu\t%d\n",
+				"hdv0", "partition", si.totalswap >> 10,
+				(si.totalswap - si.freeswap) >> 10, -1);
+		}
 		return 0;
 	}
 
@@ -2600,6 +2611,8 @@ void si_swapinfo(struct sysinfo *val)
 	val->freeswap = atomic_long_read(&nr_swap_pages) + nr_to_be_unused;
 	val->totalswap = total_swap_pages + nr_to_be_unused;
 	spin_unlock(&swap_lock);
+	if (vx_flags(VXF_VIRT_MEM, 0))
+		vx_vsi_swapinfo(val);
 }
 
 /*

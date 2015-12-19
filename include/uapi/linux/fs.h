@@ -86,6 +86,9 @@ struct inodes_stat_t {
 #define MS_KERNMOUNT	(1<<22) /* this is a kern_mount call */
 #define MS_I_VERSION	(1<<23) /* Update inode I_version field */
 #define MS_STRICTATIME	(1<<24) /* Always perform atime updates */
+#define MS_TAGGED	(1<<8)	/* use generic inode tagging */
+#define MS_NOTAGCHECK	(1<<9)	/* don't check tags */
+#define MS_TAGID	(1<<25) /* use specific tag for this mount */
 
 /* These sb flags are internal to the kernel */
 #define MS_NOSEC	(1<<28)
@@ -191,11 +194,14 @@ struct inodes_stat_t {
 #define FS_EXTENT_FL			0x00080000 /* Extents */
 #define FS_DIRECTIO_FL			0x00100000 /* Use direct i/o */
 #define FS_NOCOW_FL			0x00800000 /* Do not cow file */
+#define FS_IXUNLINK_FL			0x08000000 /* Immutable invert on unlink */
 #define FS_RESERVED_FL			0x80000000 /* reserved for ext2 lib */
 
-#define FS_FL_USER_VISIBLE		0x0003DFFF /* User visible flags */
-#define FS_FL_USER_MODIFIABLE		0x000380FF /* User modifiable flags */
+#define FS_BARRIER_FL			0x04000000 /* Barrier for chroot() */
+#define FS_COW_FL			0x20000000 /* Copy on Write marker */
 
+#define FS_FL_USER_VISIBLE		0x0103DFFF /* User visible flags */
+#define FS_FL_USER_MODIFIABLE		0x010380FF /* User modifiable flags */
 
 #define SYNC_FILE_RANGE_WAIT_BEFORE	1
 #define SYNC_FILE_RANGE_WRITE		2

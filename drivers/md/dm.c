@@ -19,6 +19,7 @@
 #include <linux/idr.h>
 #include <linux/hdreg.h>
 #include <linux/delay.h>
+#include <linux/vs_base.h>
 
 #include <trace/events/block.h>
 
@@ -141,6 +142,7 @@ struct mapped_device {
 	struct mutex suspend_lock;
 	atomic_t holders;
 	atomic_t open_count;
+	vxid_t xid;
 
 	/*
 	 * The current mapping.
@@ -395,6 +397,7 @@ int dm_deleting_md(struct mapped_device *md)
 static int dm_blk_open(struct block_device *bdev, fmode_t mode)
 {
 	struct mapped_device *md;
+	int ret = -ENXIO;
 
 	spin_lock(&_minor_lock);
 
@@ -403,18 +406,19 @@ static int dm_blk_open(struct block_device *bdev, fmode_t mode)
 		goto out;
 
 	if (test_bit(DMF_FREEING, &md->flags) ||
-	    dm_deleting_md(md)) {
-		md = NULL;
+	    dm_deleting_md(md))
 		goto out;
-	}
+
+	ret = -EACCES;
+	if (!vx_check(md->xid, VS_IDENT|VS_HOSTID))
+		goto out;
 
 	dm_get(md);
 	atomic_inc(&md->open_count);
-
+	ret = 0;
 out:
 	spin_unlock(&_minor_lock);
-
-	return md ? 0 : -ENXIO;
+	return ret;
 }
 
 static void dm_blk_close(struct gendisk *disk, fmode_t mode)
@@ -696,6 +700,14 @@ int dm_set_geometry(struct mapped_device *md, struct hd_geometry *geo)
 	md->geometry = *geo;
 
 	return 0;
+}
+
+/*
+ * Get the xid associated with a dm device
+ */
+vxid_t dm_get_xid(struct mapped_device *md)
+{
+	return md->xid;
 }
 
 /*-----------------------------------------------------------------
@@ -1904,6 +1916,7 @@ static struct mapped_device *alloc_dev(int minor)
 	INIT_LIST_HEAD(&md->uevent_list);
 	spin_lock_init(&md->uevent_lock);
 
+	md->xid = vx_current_xid();
 	md->queue = blk_alloc_queue(GFP_KERNEL);
 	if (!md->queue)
 		goto bad_queue;

@@ -28,6 +28,7 @@
 #include <linux/syscalls.h>
 #include <linux/security.h>
 #include <linux/pid_namespace.h>
+#include <linux/vs_base.h>
 
 int set_task_ioprio(struct task_struct *task, int ioprio)
 {
@@ -105,6 +106,8 @@ SYSCALL_DEFINE3(ioprio_set, int, which, int, who, int, ioprio)
 			else
 				pgrp = find_vpid(who);
 			do_each_pid_thread(pgrp, PIDTYPE_PGID, p) {
+				if (!vx_check(p->xid, VS_ADMIN_P | VS_IDENT))
+					continue;
 				ret = set_task_ioprio(p, ioprio);
 				if (ret)
 					break;
@@ -200,6 +203,8 @@ SYSCALL_DEFINE2(ioprio_get, int, which, int, who)
 			else
 				pgrp = find_vpid(who);
 			do_each_pid_thread(pgrp, PIDTYPE_PGID, p) {
+				if (!vx_check(p->xid, VS_ADMIN_P | VS_IDENT))
+					continue;
 				tmpio = get_task_ioprio(p);
 				if (tmpio < 0)
 					continue;

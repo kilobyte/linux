@@ -43,6 +43,7 @@
 #include <linux/btrfs.h>
 #include <linux/blkdev.h>
 #include <linux/posix_acl_xattr.h>
+#include <linux/vs_tag.h>
 #include "ctree.h"
 #include "disk-io.h"
 #include "transaction.h"
@@ -3361,6 +3362,9 @@ static void btrfs_read_locked_inode(struct inode *inode)
 	unsigned long ptr;
 	int maybe_acls;
 	u32 rdev;
+	kuid_t kuid;
+	kgid_t kgid;
+	ktag_t ktag;
 	int ret;
 	bool filled = false;
 	int first_xattr_slot;
@@ -3388,8 +3392,14 @@ static void btrfs_read_locked_inode(struct inode *inode)
 				    struct btrfs_inode_item);
 	inode->i_mode = btrfs_inode_mode(leaf, inode_item);
 	set_nlink(inode, btrfs_inode_nlink(leaf, inode_item));
-	i_uid_write(inode, btrfs_inode_uid(leaf, inode_item));
-	i_gid_write(inode, btrfs_inode_gid(leaf, inode_item));
+
+	kuid = make_kuid(&init_user_ns, btrfs_inode_uid(leaf, inode_item));
+	kgid = make_kgid(&init_user_ns, btrfs_inode_gid(leaf, inode_item));
+	ktag = make_ktag(&init_user_ns, btrfs_inode_tag(leaf, inode_item));
+
+	inode->i_uid = INOTAG_KUID(DX_TAG(inode), kuid, kgid);
+	inode->i_gid = INOTAG_KGID(DX_TAG(inode), kuid, kgid);
+	inode->i_tag = INOTAG_KTAG(DX_TAG(inode), kuid, kgid, ktag);
 	btrfs_i_size_write(inode, btrfs_inode_size(leaf, inode_item));
 
 	tspec = btrfs_inode_atime(inode_item);
@@ -3513,11 +3523,18 @@ static void fill_inode_item(struct btrfs_trans_handle *trans,
 			    struct inode *inode)
 {
 	struct btrfs_map_token token;
+	uid_t uid = from_kuid(&init_user_ns,
+		TAGINO_KUID(DX_TAG(inode), inode->i_uid, inode->i_tag));
+	gid_t gid = from_kgid(&init_user_ns,
+		TAGINO_KGID(DX_TAG(inode), inode->i_gid, inode->i_tag));
 
 	btrfs_init_map_token(&token);
 
-	btrfs_set_token_inode_uid(leaf, item, i_uid_read(inode), &token);
-	btrfs_set_token_inode_gid(leaf, item, i_gid_read(inode), &token);
+	btrfs_set_token_inode_uid(leaf, item, uid, &token);
+	btrfs_set_token_inode_gid(leaf, item, gid, &token);
+#ifdef CONFIG_TAGGING_INTERN
+	btrfs_set_token_inode_tag(leaf, item, i_tag_read(inode), &token);
+#endif
 	btrfs_set_token_inode_size(leaf, item, BTRFS_I(inode)->disk_i_size,
 				   &token);
 	btrfs_set_token_inode_mode(leaf, item, inode->i_mode, &token);
@@ -8895,13 +8912,16 @@ static const struct inode_operations btrfs_dir_inode_operations = {
 	.listxattr	= btrfs_listxattr,
 	.removexattr	= btrfs_removexattr,
 	.permission	= btrfs_permission,
+	.sync_flags	= btrfs_sync_flags,
 	.get_acl	= btrfs_get_acl,
 	.set_acl	= btrfs_set_acl,
 	.update_time	= btrfs_update_time,
 };
+
 static const struct inode_operations btrfs_dir_ro_inode_operations = {
 	.lookup		= btrfs_lookup,
 	.permission	= btrfs_permission,
+	.sync_flags	= btrfs_sync_flags,
 	.get_acl	= btrfs_get_acl,
 	.set_acl	= btrfs_set_acl,
 	.update_time	= btrfs_update_time,
@@ -8972,6 +8992,7 @@ static const struct inode_operations btrfs_file_inode_operations = {
 	.removexattr	= btrfs_removexattr,
 	.permission	= btrfs_permission,
 	.fiemap		= btrfs_fiemap,
+	.sync_flags	= btrfs_sync_flags,
 	.get_acl	= btrfs_get_acl,
 	.set_acl	= btrfs_set_acl,
 	.update_time	= btrfs_update_time,

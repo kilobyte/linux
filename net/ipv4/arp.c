@@ -1345,6 +1345,7 @@ static void arp_format_neigh_entry(struct seq_file *seq,
 	struct net_device *dev = n->dev;
 	int hatype = dev->type;
 
+	/* FIXME: check for network context */
 	read_lock(&n->lock);
 	/* Convert hardware address to XX:XX:XX:XX ... form. */
 #if IS_ENABLED(CONFIG_AX25)
@@ -1376,6 +1377,7 @@ static void arp_format_pneigh_entry(struct seq_file *seq,
 	int hatype = dev ? dev->type : 0;
 	char tbuf[16];
 
+	/* FIXME: check for network context */
 	sprintf(tbuf, "%pI4", n->key);
 	seq_printf(seq, "%-16s 0x%-10x0x%-10x%s     *        %s\n",
 		   tbuf, hatype, ATF_PUBL | ATF_PERM, "00:00:00:00:00:00",

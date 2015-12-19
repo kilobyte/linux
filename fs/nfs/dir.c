@@ -37,6 +37,7 @@
 #include <linux/sched.h>
 #include <linux/kmemleak.h>
 #include <linux/xattr.h>
+#include <linux/vs_tag.h>
 
 #include "delegation.h"
 #include "iostat.h"
@@ -1328,6 +1329,7 @@ struct dentry *nfs_lookup(struct inode *dir, struct dentry * dentry, unsigned in
 	/* Success: notify readdir to use READDIRPLUS */
 	nfs_advise_use_readdirplus(dir);
 
+	dx_propagate_tag(nd, inode);
 no_entry:
 	res = d_materialise_unique(dentry, inode);
 	if (res != NULL) {

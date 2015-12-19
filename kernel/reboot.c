@@ -16,6 +16,7 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
+#include <linux/vs_pid.h>
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
@@ -188,6 +189,8 @@ EXPORT_SYMBOL_GPL(kernel_power_off);
 
 static DEFINE_MUTEX(reboot_mutex);
 
+long vs_reboot(unsigned int, void __user *);
+
 /*
  * Reboot system call: for obvious reasons only root may call it,
  * and even root needs to set up some magic numbers in the registers
@@ -229,6 +232,9 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	 */
 	if ((cmd == LINUX_REBOOT_CMD_POWER_OFF) && !pm_power_off)
 		cmd = LINUX_REBOOT_CMD_HALT;
+
+	if (!vx_check(0, VS_ADMIN|VS_WATCH))
+		return vs_reboot(cmd, arg);
 
 	mutex_lock(&reboot_mutex);
 	switch (cmd) {

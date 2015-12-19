@@ -14,6 +14,7 @@
 #include <linux/spinlock.h>
 #include <linux/atomic.h>
 #include <linux/binfmts.h>
+#include <linux/vs_pid.h>
 
 struct ctl_table_header;
 struct mempolicy;
@@ -35,6 +36,7 @@ struct proc_dir_entry {
 	nlink_t nlink;
 	kuid_t uid;
 	kgid_t gid;
+	int vx_flags;
 	loff_t size;
 	const struct inode_operations *proc_iops;
 	const struct file_operations *proc_fops;
@@ -50,16 +52,23 @@ struct proc_dir_entry {
 	char name[];
 };
 
+struct vx_info;
+struct nx_info;
+
 union proc_op {
 	int (*proc_get_link)(struct dentry *, struct path *);
 	int (*proc_read)(struct task_struct *task, char *page);
 	int (*proc_show)(struct seq_file *m,
 		struct pid_namespace *ns, struct pid *pid,
 		struct task_struct *task);
+	int (*proc_vs_read)(char *page);
+	int (*proc_vxi_read)(struct vx_info *vxi, char *page);
+	int (*proc_nxi_read)(struct nx_info *nxi, char *page);
 };
 
 struct proc_inode {
 	struct pid *pid;
+	int vx_flags;
 	int fd;
 	union proc_op op;
 	struct proc_dir_entry *pde;
@@ -92,9 +101,14 @@ static inline struct pid *proc_pid(struct inode *inode)
 	return PROC_I(inode)->pid;
 }
 
-static inline struct task_struct *get_proc_task(struct inode *inode)
+static inline struct task_struct *get_proc_task_real(struct inode *inode)
 {
 	return get_pid_task(proc_pid(inode), PIDTYPE_PID);
+}
+
+static inline struct task_struct *get_proc_task(struct inode *inode)
+{
+	return vx_get_proc_task(inode, proc_pid(inode));
 }
 
 static inline int task_dumpable(struct task_struct *task)
@@ -155,6 +169,8 @@ extern int proc_pid_status(struct seq_file *, struct pid_namespace *,
 			   struct pid *, struct task_struct *);
 extern int proc_pid_statm(struct seq_file *, struct pid_namespace *,
 			  struct pid *, struct task_struct *);
+extern int proc_pid_nsproxy(struct seq_file *m, struct pid_namespace *ns,
+			    struct pid *pid, struct task_struct *task);
 
 /*
  * base.c

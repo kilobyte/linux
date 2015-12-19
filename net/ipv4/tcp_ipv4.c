@@ -2231,6 +2231,12 @@ static void *listening_get_next(struct seq_file *seq, void *cur)
 		req = req->dl_next;
 		while (1) {
 			while (req) {
+				vxdprintk(VXD_CBIT(net, 6),
+					"sk,req: %p [#%d] (from %d)", req->sk,
+					(req->sk)?req->sk->sk_nid:0, nx_current_nid());
+				if (req->sk &&
+					!nx_check(req->sk->sk_nid, VS_WATCH_P | VS_IDENT))
+					continue;
 				if (req->rsk_ops->family == st->family) {
 					cur = req;
 					goto out;
@@ -2255,6 +2261,10 @@ get_req:
 	}
 get_sk:
 	sk_nulls_for_each_from(sk, node) {
+		vxdprintk(VXD_CBIT(net, 6), "sk: %p [#%d] (from %d)",
+			sk, sk->sk_nid, nx_current_nid());
+		if (!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
+			continue;
 		if (!net_eq(sock_net(sk), net))
 			continue;
 		if (sk->sk_family == st->family) {
@@ -2329,6 +2339,11 @@ static void *established_get_first(struct seq_file *seq)
 
 		spin_lock_bh(lock);
 		sk_nulls_for_each(sk, node, &tcp_hashinfo.ehash[st->bucket].chain) {
+			vxdprintk(VXD_CBIT(net, 6),
+				"sk,egf: %p [#%d] (from %d)",
+				sk, sk->sk_nid, nx_current_nid());
+			if (!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
+				continue;
 			if (sk->sk_family != st->family ||
 			    !net_eq(sock_net(sk), net)) {
 				continue;
@@ -2355,6 +2370,11 @@ static void *established_get_next(struct seq_file *seq, void *cur)
 	sk = sk_nulls_next(sk);
 
 	sk_nulls_for_each_from(sk, node) {
+		vxdprintk(VXD_CBIT(net, 6),
+			"sk,egn: %p [#%d] (from %d)",
+			sk, sk->sk_nid, nx_current_nid());
+		if (!nx_check(sk->sk_nid, VS_WATCH_P | VS_IDENT))
+			continue;
 		if (sk->sk_family == st->family && net_eq(sock_net(sk), net))
 			return sk;
 	}
@@ -2553,9 +2573,9 @@ static void get_openreq4(const struct sock *sk, const struct request_sock *req,
 	seq_printf(f, "%4d: %08X:%04X %08X:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5u %8d %u %d %pK",
 		i,
-		ireq->ir_loc_addr,
+		nx_map_sock_lback(current_nx_info(), ireq->ir_loc_addr),
 		ntohs(inet_sk(sk)->inet_sport),
-		ireq->ir_rmt_addr,
+		nx_map_sock_lback(current_nx_info(), ireq->ir_rmt_addr),
 		ntohs(ireq->ir_rmt_port),
 		TCP_SYN_RECV,
 		0, 0, /* could print option size, but that is af dependent. */
@@ -2577,8 +2597,8 @@ static void get_tcp4_sock(struct sock *sk, struct seq_file *f, int i)
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	const struct inet_sock *inet = inet_sk(sk);
 	struct fastopen_queue *fastopenq = icsk->icsk_accept_queue.fastopenq;
-	__be32 dest = inet->inet_daddr;
-	__be32 src = inet->inet_rcv_saddr;
+	__be32 dest = nx_map_sock_lback(current_nx_info(), inet->inet_daddr);
+	__be32 src = nx_map_sock_lback(current_nx_info(), inet->inet_rcv_saddr);
 	__u16 destp = ntohs(inet->inet_dport);
 	__u16 srcp = ntohs(inet->inet_sport);
 	int rx_queue;
@@ -2635,8 +2655,8 @@ static void get_timewait4_sock(const struct inet_timewait_sock *tw,
 	__u16 destp, srcp;
 	s32 delta = tw->tw_ttd - inet_tw_time_stamp();
 
-	dest  = tw->tw_daddr;
-	src   = tw->tw_rcv_saddr;
+	dest  = nx_map_sock_lback(current_nx_info(), tw->tw_daddr);
+	src   = nx_map_sock_lback(current_nx_info(), tw->tw_rcv_saddr);
 	destp = ntohs(tw->tw_dport);
 	srcp  = ntohs(tw->tw_sport);
 

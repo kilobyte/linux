@@ -73,6 +73,8 @@
 #include <linux/init_task.h>
 #include <linux/binfmts.h>
 #include <linux/context_tracking.h>
+#include <linux/vs_sched.h>
+#include <linux/vs_cvirt.h>
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
@@ -3115,7 +3117,7 @@ SYSCALL_DEFINE1(nice, int, increment)
 		nice = 19;
 
 	if (increment < 0 && !can_nice(current, nice))
-		return -EPERM;
+		return vx_flags(VXF_IGNEG_NICE, 0) ? 0 : -EPERM;
 
 	retval = security_task_setnice(current, nice);
 	if (retval)

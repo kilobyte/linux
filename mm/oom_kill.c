@@ -35,6 +35,8 @@
 #include <linux/freezer.h>
 #include <linux/ftrace.h>
 #include <linux/ratelimit.h>
+#include <linux/reboot.h>
+#include <linux/vs_context.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/oom.h>
@@ -121,9 +123,16 @@ found:
 static bool oom_unkillable_task(struct task_struct *p,
 		const struct mem_cgroup *memcg, const nodemask_t *nodemask)
 {
-	if (is_global_init(p))
+	unsigned xid = vx_current_xid();
+
+	/* skip the init task, global and per guest */
+	if (task_is_init(p))
 		return true;
 	if (p->flags & PF_KTHREAD)
+		return true;
+
+	/* skip other guest and host processes if oom in guest */
+	if (xid && vx_task_xid(p) != xid)
 		return true;
 
 	/* When mem_cgroup_out_of_memory() and p is not member of the group */
@@ -455,8 +464,8 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 		dump_header(p, gfp_mask, order, memcg, nodemask);
 
 	task_lock(p);
-	pr_err("%s: Kill process %d (%s) score %d or sacrifice child\n",
-		message, task_pid_nr(p), p->comm, points);
+	pr_err("%s: Kill process %d:#%u (%s) score %d or sacrifice child\n",
+		message, task_pid_nr(p), p->xid, p->comm, points);
 	task_unlock(p);
 
 	/*
@@ -499,8 +508,8 @@ void oom_kill_process(struct task_struct *p, gfp_t gfp_mask, int order,
 
 	/* mm cannot safely be dereferenced after task_unlock(victim) */
 	mm = victim->mm;
-	pr_err("Killed process %d (%s) total-vm:%lukB, anon-rss:%lukB, file-rss:%lukB\n",
-		task_pid_nr(victim), victim->comm, K(victim->mm->total_vm),
+	pr_err("Killed process %d:#%u (%s) total-vm:%lukB, anon-rss:%lukB, file-rss:%lukB\n",
+		task_pid_nr(victim), victim->xid, victim->comm, K(victim->mm->total_vm),
 		K(get_mm_counter(victim->mm, MM_ANONPAGES)),
 		K(get_mm_counter(victim->mm, MM_FILEPAGES)));
 	task_unlock(victim);
@@ -570,6 +579,8 @@ int unregister_oom_notifier(struct notifier_block *nb)
 	return blocking_notifier_chain_unregister(&oom_notify_list, nb);
 }
 EXPORT_SYMBOL_GPL(unregister_oom_notifier);
+
+long vs_oom_action(unsigned int);
 
 /*
  * Try to acquire the OOM killer lock for the zones in zonelist.  Returns zero
@@ -683,7 +694,12 @@ void out_of_memory(struct zonelist *zonelist, gfp_t gfp_mask,
 	/* Found nothing?!?! Either we hang forever, or we panic. */
 	if (!p) {
 		dump_header(NULL, gfp_mask, order, NULL, mpol_mask);
-		panic("Out of memory and no killable processes...\n");
+
+		/* avoid panic for guest OOM */
+		if (vx_current_xid())
+			vs_oom_action(LINUX_REBOOT_CMD_OOM);
+		else
+			panic("Out of memory and no killable processes...\n");
 	}
 	if (p != (void *)-1UL) {
 		oom_kill_process(p, gfp_mask, order, points, totalpages, NULL,

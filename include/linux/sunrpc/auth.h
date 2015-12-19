@@ -36,6 +36,7 @@ enum {
 struct auth_cred {
 	kuid_t	uid;
 	kgid_t	gid;
+	ktag_t	tag;
 	struct group_info *group_info;
 	const char *principal;
 	unsigned long ac_flags;

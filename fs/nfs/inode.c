@@ -38,6 +38,7 @@
 #include <linux/slab.h>
 #include <linux/compat.h>
 #include <linux/freezer.h>
+#include <linux/vs_tag.h>
 
 #include <asm/uaccess.h>
 
@@ -359,6 +360,8 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 	if (inode->i_state & I_NEW) {
 		struct nfs_inode *nfsi = NFS_I(inode);
 		unsigned long now = jiffies;
+		kuid_t kuid;
+		kgid_t kgid;
 
 		/* We set i_ino for the few things that still rely on it,
 		 * such as stat(2) */
@@ -403,8 +406,8 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		inode->i_version = 0;
 		inode->i_size = 0;
 		clear_nlink(inode);
-		inode->i_uid = make_kuid(&init_user_ns, -2);
-		inode->i_gid = make_kgid(&init_user_ns, -2);
+		kuid = make_kuid(&init_user_ns, -2);
+		kgid = make_kgid(&init_user_ns, -2);
 		inode->i_blocks = 0;
 		memset(nfsi->cookieverf, 0, sizeof(nfsi->cookieverf));
 		nfsi->write_io = 0;
@@ -438,11 +441,11 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 		else if (nfs_server_capable(inode, NFS_CAP_NLINK))
 			nfsi->cache_validity |= NFS_INO_INVALID_ATTR;
 		if (fattr->valid & NFS_ATTR_FATTR_OWNER)
-			inode->i_uid = fattr->uid;
+			kuid = fattr->uid;
 		else if (nfs_server_capable(inode, NFS_CAP_OWNER))
 			nfsi->cache_validity |= NFS_INO_INVALID_ATTR;
 		if (fattr->valid & NFS_ATTR_FATTR_GROUP)
-			inode->i_gid = fattr->gid;
+			kgid = fattr->gid;
 		else if (nfs_server_capable(inode, NFS_CAP_OWNER_GROUP))
 			nfsi->cache_validity |= NFS_INO_INVALID_ATTR;
 		if (fattr->valid & NFS_ATTR_FATTR_BLOCKS_USED)
@@ -453,6 +456,10 @@ nfs_fhget(struct super_block *sb, struct nfs_fh *fh, struct nfs_fattr *fattr, st
 			 */
 			inode->i_blocks = nfs_calc_block_size(fattr->du.nfs3.used);
 		}
+		inode->i_uid = INOTAG_KUID(DX_TAG(inode), kuid, kgid);
+		inode->i_gid = INOTAG_KGID(DX_TAG(inode), kuid, kgid);
+		inode->i_tag = INOTAG_KTAG(DX_TAG(inode), kuid, kgid, GLOBAL_ROOT_TAG);
+				/* maybe fattr->xid someday */
 
 		nfs_setsecurity(inode, fattr, label);
 
@@ -578,6 +585,8 @@ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr)
 			inode->i_uid = attr->ia_uid;
 		if ((attr->ia_valid & ATTR_GID) != 0)
 			inode->i_gid = attr->ia_gid;
+		if ((attr->ia_valid & ATTR_TAG) && IS_TAGGED(inode))
+			inode->i_tag = attr->ia_tag;
 		NFS_I(inode)->cache_validity |= NFS_INO_INVALID_ACCESS|NFS_INO_INVALID_ACL;
 		spin_unlock(&inode->i_lock);
 	}
@@ -1128,7 +1137,9 @@ static int nfs_check_inode_attributes(struct inode *inode, struct nfs_fattr *fat
 	struct nfs_inode *nfsi = NFS_I(inode);
 	loff_t cur_size, new_isize;
 	unsigned long invalid = 0;
-
+	kuid_t kuid;
+	kgid_t kgid;
+	ktag_t ktag;
 
 	if (nfs_have_delegated_attributes(inode))
 		return 0;
@@ -1153,13 +1164,18 @@ static int nfs_check_inode_attributes(struct inode *inode, struct nfs_fattr *fat
 			invalid |= NFS_INO_INVALID_ATTR|NFS_INO_REVAL_PAGECACHE;
 	}
 
+	kuid = INOTAG_KUID(DX_TAG(inode), fattr->uid, fattr->gid);
+	kgid = INOTAG_KGID(DX_TAG(inode), fattr->uid, fattr->gid);
+	ktag = INOTAG_KTAG(DX_TAG(inode), fattr->uid, fattr->gid, GLOBAL_ROOT_TAG);
+
 	/* Have any file permissions changed? */
 	if ((fattr->valid & NFS_ATTR_FATTR_MODE) && (inode->i_mode & S_IALLUGO) != (fattr->mode & S_IALLUGO))
 		invalid |= NFS_INO_INVALID_ATTR | NFS_INO_INVALID_ACCESS | NFS_INO_INVALID_ACL;
-	if ((fattr->valid & NFS_ATTR_FATTR_OWNER) && !uid_eq(inode->i_uid, fattr->uid))
+	if ((fattr->valid & NFS_ATTR_FATTR_OWNER) && !uid_eq(inode->i_uid, kuid))
 		invalid |= NFS_INO_INVALID_ATTR | NFS_INO_INVALID_ACCESS | NFS_INO_INVALID_ACL;
-	if ((fattr->valid & NFS_ATTR_FATTR_GROUP) && !gid_eq(inode->i_gid, fattr->gid))
+	if ((fattr->valid & NFS_ATTR_FATTR_GROUP) && !gid_eq(inode->i_gid, kgid))
 		invalid |= NFS_INO_INVALID_ATTR | NFS_INO_INVALID_ACCESS | NFS_INO_INVALID_ACL;
+		/* maybe check for tag too? */
 
 	/* Has the link count changed? */
 	if ((fattr->valid & NFS_ATTR_FATTR_NLINK) && inode->i_nlink != fattr->nlink)
@@ -1492,6 +1508,9 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 	unsigned long invalid = 0;
 	unsigned long now = jiffies;
 	unsigned long save_cache_validity;
+	kuid_t kuid;
+	kgid_t kgid;
+	ktag_t ktag;
 
 	dfprintk(VFS, "NFS: %s(%s/%lu fh_crc=0x%08x ct=%d info=0x%x)\n",
 			__func__, inode->i_sb->s_id, inode->i_ino,
@@ -1595,6 +1614,9 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 				| NFS_INO_REVAL_PAGECACHE
 				| NFS_INO_REVAL_FORCED);
 
+	kuid = TAGINO_KUID(DX_TAG(inode), inode->i_uid, inode->i_tag);
+	kgid = TAGINO_KGID(DX_TAG(inode), inode->i_gid, inode->i_tag);
+	ktag = TAGINO_KTAG(DX_TAG(inode), inode->i_tag);
 
 	if (fattr->valid & NFS_ATTR_FATTR_ATIME)
 		memcpy(&inode->i_atime, &fattr->atime, sizeof(inode->i_atime));
@@ -1640,6 +1662,10 @@ static int nfs_update_inode(struct inode *inode, struct nfs_fattr *fattr)
 				| NFS_INO_INVALID_ACCESS
 				| NFS_INO_INVALID_ACL
 				| NFS_INO_REVAL_FORCED);
+
+	inode->i_uid = INOTAG_KUID(DX_TAG(inode), kuid, kgid);
+	inode->i_gid = INOTAG_KGID(DX_TAG(inode), kuid, kgid);
+	inode->i_tag = INOTAG_KTAG(DX_TAG(inode), kuid, kgid, ktag);
 
 	if (fattr->valid & NFS_ATTR_FATTR_NLINK) {
 		if (inode->i_nlink != fattr->nlink) {

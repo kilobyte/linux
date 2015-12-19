@@ -72,6 +72,7 @@
 
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
+#include <linux/vs_inet6.h>
 
 static void	tcp_v6_send_reset(struct sock *sk, struct sk_buff *skb);
 static void	tcp_v6_reqsk_send_ack(struct sock *sk, struct sk_buff *skb,
@@ -164,8 +165,15 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	 *	connect() to INADDR_ANY means loopback (BSD'ism).
 	 */
 
-	if (ipv6_addr_any(&usin->sin6_addr))
-		usin->sin6_addr.s6_addr[15] = 0x1;
+	if(ipv6_addr_any(&usin->sin6_addr)) {
+		struct nx_info *nxi =  sk->sk_nx_info;
+
+		if (nxi && nx_info_has_v6(nxi))
+			/* FIXME: remap lback? */
+			usin->sin6_addr = nxi->v6.ip;
+		else
+			usin->sin6_addr.s6_addr[15] = 0x1;
+	}
 
 	addr_type = ipv6_addr_type(&usin->sin6_addr);
 
