@@ -394,6 +394,18 @@ xfs_map_blocks(
 	return 0;
 }
 
+/*
+ * Find a CoW mapping and ensure that blocks have been allocated to it.
+ */
+int
+xfs_map_cow_blocks(
+	struct inode		*inode,
+	xfs_off_t		offset,
+	struct xfs_bmbt_irec	*imap)
+{
+	return xfs_map_blocks(inode, offset, imap, XFS_IO_COW);
+}
+
 STATIC bool
 xfs_imap_valid(
 	struct inode		*inode,

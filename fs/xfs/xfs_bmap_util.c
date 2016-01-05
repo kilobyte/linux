@@ -42,6 +42,8 @@
 #include "xfs_icache.h"
 #include "xfs_log.h"
 #include "xfs_rmap_btree.h"
+#include "xfs_iomap.h"
+#include "xfs_reflink.h"
 
 /* Kernel only BMAP related definitions and functions */
 
@@ -1042,7 +1044,8 @@ xfs_zero_remaining_bytes(
 	xfs_buf_t		*bp;
 	xfs_mount_t		*mp = ip->i_mount;
 	int			nimap;
-	int			error = 0;
+	int			error = 0, err2;
+	bool			should_fork = false;
 
 	/*
 	 * Avoid doing I/O beyond eof - it's not necessary
@@ -1055,6 +1058,11 @@ xfs_zero_remaining_bytes(
 	if (endoff > XFS_ISIZE(ip))
 		endoff = XFS_ISIZE(ip);
 
+	error = xfs_reflink_reserve_cow_range(ip, startoff,
+			endoff - startoff + 1);
+	if (error)
+		return error;
+
 	for (offset = startoff; offset <= endoff; offset = lastoffset + 1) {
 		uint lock_mode;
 
@@ -1063,6 +1071,10 @@ xfs_zero_remaining_bytes(
 
 		lock_mode = xfs_ilock_data_map_shared(ip);
 		error = xfs_bmapi_read(ip, offset_fsb, 1, &imap, &nimap, 0);
+
+		/* Do we need to CoW this block? */
+		if (error == 0 && nimap == 1)
+			should_fork = xfs_reflink_is_cow_pending(ip, offset);
 		xfs_iunlock(ip, lock_mode);
 
 		if (error || nimap < 1)
@@ -1084,7 +1096,7 @@ xfs_zero_remaining_bytes(
 			lastoffset = endoff;
 
 		/* DAX can just zero the backing device directly */
-		if (IS_DAX(VFS_I(ip))) {
+		if (IS_DAX(VFS_I(ip)) && !should_fork) {
 			error = dax_zero_page_range(VFS_I(ip), offset,
 						    lastoffset - offset + 1,
 						    xfs_get_blocks_direct);
@@ -1105,8 +1117,30 @@ xfs_zero_remaining_bytes(
 				(offset - XFS_FSB_TO_B(mp, imap.br_startoff)),
 		       0, lastoffset - offset + 1);
 
+		if (should_fork) {
+			xfs_fsblock_t	new_fsbno;
+
+			error = xfs_map_cow_blocks(VFS_I(ip), offset, &imap);
+			if (error) {
+				xfs_buf_relse(bp);
+				return error;
+			}
+			new_fsbno = imap.br_startblock +
+					(offset_fsb - imap.br_startoff);
+			XFS_BUF_SET_ADDR(bp, XFS_FSB_TO_DADDR(mp, new_fsbno));
+		}
+
 		error = xfs_bwrite(bp);
 		xfs_buf_relse(bp);
+		if (should_fork) {
+			if (error) {
+				err2 = xfs_reflink_cancel_cow_range(ip, offset,
+						lastoffset - offset + 1);
+				return error;
+			}
+			error = xfs_reflink_end_cow(ip, offset,
+					lastoffset - offset + 1);
+		}
 		if (error)
 			return error;
 	}
