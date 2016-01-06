@@ -1147,6 +1147,32 @@ xfs_zero_remaining_bytes(
 	return error;
 }
 
+STATIC int
+xfs_free_cow_space(
+	struct xfs_inode	*ip,
+	struct xfs_trans	**tpp,
+	xfs_fileoff_t		startoffset_fsb,
+	xfs_fileoff_t		endoffset_fsb)
+{
+	int			error;
+
+	/* Remove any pending CoW reservations. */
+	error = xfs_reflink_cancel_cow_blocks(ip, tpp, startoffset_fsb,
+			endoffset_fsb);
+	if (error)
+		goto out;
+
+	/*
+	 * Clear the reflink flag if we freed everything.
+	 */
+	if (ip->i_d.di_nblocks == 0) {
+		ip->i_d.di_flags2 &= ~XFS_DIFLAG2_REFLINK;
+		xfs_trans_log_inode(*tpp, ip, XFS_ILOG_CORE);
+	}
+out:
+	return error;
+}
+
 int
 xfs_free_file_space(
 	struct xfs_inode	*ip,
@@ -1293,6 +1319,14 @@ xfs_free_file_space(
 		error = xfs_defer_finish(&tp, &dfops, ip);
 		if (error)
 			goto error0;
+
+		/* Remove CoW reservations and inode flag if applicable. */
+		if (done && xfs_is_reflink_inode(ip)) {
+			error = xfs_free_cow_space(ip, &tp, startoffset_fsb,
+					endoffset_fsb);
+			if (error)
+				goto error0;
+		}
 
 		error = xfs_trans_commit(tp);
 		xfs_iunlock(ip, XFS_ILOCK_EXCL);
