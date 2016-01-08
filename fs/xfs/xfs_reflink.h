@@ -20,7 +20,12 @@
 #ifndef __XFS_REFLINK_H
 #define __XFS_REFLINK_H 1
 
+extern int xfs_reflink_irec_is_shared(struct xfs_inode *ip,
+		struct xfs_bmbt_irec *imap, bool *shared);
+
 extern int xfs_reflink_reserve_cow_range(struct xfs_inode *ip, xfs_off_t pos,
+		xfs_off_t len);
+extern int xfs_reflink_allocate_cow_range(struct xfs_inode *ip, xfs_off_t pos,
 		xfs_off_t len);
 extern bool xfs_reflink_is_cow_pending(struct xfs_inode *ip, xfs_off_t offset);
 extern int xfs_reflink_find_cow_mapping(struct xfs_inode *ip, xfs_off_t offset,

@@ -146,6 +146,51 @@ xfs_trim_extent(
 	}
 }
 
+/*
+ * Determine if any of the blocks in this mapping are shared.
+ */
+int
+xfs_reflink_irec_is_shared(
+	struct xfs_inode	*ip,
+	struct xfs_bmbt_irec	*irec,
+	bool			*shared)
+{
+	xfs_agnumber_t		agno;
+	xfs_agblock_t		agbno;
+	xfs_extlen_t		aglen;
+	xfs_agblock_t		fbno;
+	xfs_extlen_t		flen;
+	int			error = 0;
+
+	/* Holes, unwritten, and delalloc extents cannot be shared */
+	if (!xfs_is_reflink_inode(ip) ||
+	    ISUNWRITTEN(irec) ||
+	    irec->br_startblock == HOLESTARTBLOCK ||
+	    irec->br_startblock == DELAYSTARTBLOCK) {
+		*shared = false;
+		return 0;
+	}
+
+	trace_xfs_reflink_irec_is_shared(ip, irec);
+
+	agno = XFS_FSB_TO_AGNO(ip->i_mount, irec->br_startblock);
+	agbno = XFS_FSB_TO_AGBNO(ip->i_mount, irec->br_startblock);
+	aglen = irec->br_blockcount;
+
+	/* Are there any shared blocks here? */
+	error = xfs_refcount_find_shared(ip->i_mount, agno, agbno,
+			aglen, &fbno, &flen, false);
+	if (error)
+		return error;
+	if (flen == 0) {
+		*shared = false;
+		return 0;
+	}
+
+	*shared = true;
+	return 0;
+}
+
 /* Find the shared ranges under an irec, and set up delalloc extents. */
 static int
 xfs_reflink_reserve_cow_extent(
@@ -269,6 +314,66 @@ xfs_reflink_reserve_cow_range(
 
 	if (error)
 		trace_xfs_reflink_reserve_cow_range_error(ip, error, _RET_IP_);
+	return error;
+}
+
+/*
+ * Allocate blocks to all CoW reservations within a byte range of a file.
+ */
+int
+xfs_reflink_allocate_cow_range(
+	struct xfs_inode	*ip,
+	xfs_off_t		pos,
+	xfs_off_t		len)
+{
+	struct xfs_ifork	*ifp;
+	struct xfs_bmbt_rec_host	*gotp;
+	struct xfs_bmbt_irec	imap;
+	int			error = 0;
+	xfs_fileoff_t		start_lblk;
+	xfs_fileoff_t		end_lblk;
+	xfs_extnum_t		idx;
+
+	if (!xfs_is_reflink_inode(ip))
+		return 0;
+
+	trace_xfs_reflink_allocate_cow_range(ip, len, pos, 0);
+
+	start_lblk = XFS_B_TO_FSBT(ip->i_mount, pos);
+	end_lblk = XFS_B_TO_FSB(ip->i_mount, pos + len);
+	ifp = XFS_IFORK_PTR(ip, XFS_COW_FORK);
+	xfs_ilock(ip, XFS_ILOCK_EXCL);
+
+	gotp = xfs_iext_bno_to_ext(ifp, start_lblk, &idx);
+	while (gotp) {
+		xfs_bmbt_get_all(gotp, &imap);
+
+		if (imap.br_startoff >= end_lblk)
+			break;
+		if (!isnullstartblock(imap.br_startblock))
+			goto advloop;
+		xfs_trim_extent(&imap, start_lblk, end_lblk - start_lblk);
+		trace_xfs_reflink_allocate_cow_extent(ip, &imap);
+
+		xfs_iunlock(ip, XFS_ILOCK_EXCL);
+		error = xfs_iomap_write_allocate(ip, XFS_COW_FORK,
+				XFS_FSB_TO_B(ip->i_mount, imap.br_startoff +
+						imap.br_blockcount - 1), &imap);
+		xfs_ilock(ip, XFS_ILOCK_EXCL);
+		if (error)
+			break;
+advloop:
+		/* Roll on... */
+		idx++;
+		if (idx >= ifp->if_bytes / sizeof(xfs_bmbt_rec_t))
+			break;
+		gotp = xfs_iext_get_ext(ifp, idx);
+	}
+
+	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+
+	if (error)
+		trace_xfs_reflink_allocate_cow_range_error(ip, error, _RET_IP_);
 	return error;
 }
 
