@@ -2421,6 +2421,53 @@ DEFINE_MAP_EXTENT_DEFERRED_EVENT(xfs_defer_map_extent);
 DEFINE_BMAP_FREE_DEFERRED_EVENT(xfs_bmap_free_defer);
 DEFINE_BMAP_FREE_DEFERRED_EVENT(xfs_bmap_free_deferred);
 
+/* rmap tracepoints */
+DECLARE_EVENT_CLASS(xfs_rmap_class,
+	TP_PROTO(struct xfs_mount *mp, xfs_agnumber_t agno,
+		 xfs_agblock_t agbno, xfs_extlen_t len, bool unwritten,
+		 struct xfs_owner_info *oinfo),
+	TP_ARGS(mp, agno, agbno, len, unwritten, oinfo),
+	TP_STRUCT__entry(
+		__field(dev_t, dev)
+		__field(xfs_agnumber_t, agno)
+		__field(xfs_agblock_t, agbno)
+		__field(xfs_extlen_t, len)
+		__field(uint64_t, owner)
+		__field(uint64_t, offset)
+		__field(unsigned long, flags)
+	),
+	TP_fast_assign(
+		__entry->dev = mp->m_super->s_dev;
+		__entry->agno = agno;
+		__entry->agbno = agbno;
+		__entry->len = len;
+		__entry->owner = oinfo->oi_owner;
+		__entry->offset = oinfo->oi_offset;
+		__entry->flags = oinfo->oi_flags;
+	),
+	TP_printk("dev %d:%d agno %u agbno %u len %u owner %lld offset %llu flags 0x%lx",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->agno,
+		  __entry->agbno,
+		  __entry->len,
+		  __entry->owner,
+		  __entry->offset,
+		  __entry->flags)
+);
+#define DEFINE_RMAP_EVENT(name) \
+DEFINE_EVENT(xfs_rmap_class, name, \
+	TP_PROTO(struct xfs_mount *mp, xfs_agnumber_t agno, \
+		 xfs_agblock_t agbno, xfs_extlen_t len, bool unwritten, \
+		 struct xfs_owner_info *oinfo), \
+	TP_ARGS(mp, agno, agbno, len, unwritten, oinfo))
+
+DEFINE_RMAP_EVENT(xfs_rmap_free_extent);
+DEFINE_RMAP_EVENT(xfs_rmap_free_extent_done);
+DEFINE_RMAP_EVENT(xfs_rmap_free_extent_error);
+DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent);
+DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent_done);
+DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent_error);
+
 #endif /* _TRACE_XFS_H */
 
 #undef TRACE_INCLUDE_PATH
