@@ -1782,3 +1782,29 @@ out_unlock:
 	trace_xfs_reflink_cow_eof_block_error(ip, error, _RET_IP_);
 	return error;
 }
+
+/*
+ * Ensure that the only change we allow to the inode reflink flag is to clear
+ * it when the fs supports reflink and the size is zero.
+ */
+int
+xfs_reflink_check_flag_adjust(
+	struct xfs_inode	*ip,
+	unsigned int		*xflags)
+{
+	unsigned int		chg;
+
+	chg = !!(*xflags & FS_XFLAG_REFLINK) ^ !!xfs_is_reflink_inode(ip);
+
+	if (!chg)
+		return 0;
+	if (!xfs_sb_version_hasreflink(&ip->i_mount->m_sb))
+		return -EOPNOTSUPP;
+	if (i_size_read(VFS_I(ip)) != 0)
+		return -EINVAL;
+	if (*xflags & FS_XFLAG_REFLINK) {
+		*xflags &= ~FS_XFLAG_REFLINK;
+		return 0;
+	}
+	return 0;
+}

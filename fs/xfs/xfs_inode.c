@@ -652,6 +652,8 @@ _xfs_dic2xflags(
 	if (di_flags2 & XFS_DIFLAG2_ANY) {
 		if (di_flags2 & XFS_DIFLAG2_DAX)
 			flags |= FS_XFLAG_DAX;
+		if (di_flags2 & XFS_DIFLAG2_REFLINK)
+			flags |= FS_XFLAG_REFLINK;
 	}
 
 	if (has_attr)
