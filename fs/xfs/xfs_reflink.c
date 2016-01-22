@@ -1010,18 +1010,19 @@ out_error:
 }
 
 /*
- * Update destination inode size, if necessary.
+ * Update destination inode size & cowextsize hint, if necessary.
  */
 STATIC int
 xfs_reflink_update_dest(
 	struct xfs_inode	*dest,
-	xfs_off_t		newlen)
+	xfs_off_t		newlen,
+	xfs_extlen_t		cowextsize)
 {
 	struct xfs_mount	*mp = dest->i_mount;
 	struct xfs_trans	*tp;
 	int			error;
 
-	if (newlen <= i_size_read(VFS_I(dest)))
+	if (newlen <= i_size_read(VFS_I(dest)) && cowextsize == 0)
 		return 0;
 
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_ichange, 0, 0, 0, &tp);
@@ -1031,9 +1032,17 @@ xfs_reflink_update_dest(
 	xfs_ilock(dest, XFS_ILOCK_EXCL);
 	xfs_trans_ijoin(tp, dest, XFS_ILOCK_EXCL);
 
-	trace_xfs_reflink_update_inode_size(dest, newlen);
-	i_size_write(VFS_I(dest), newlen);
-	dest->i_d.di_size = newlen;
+	if (newlen > i_size_read(VFS_I(dest))) {
+		trace_xfs_reflink_update_inode_size(dest, newlen);
+		i_size_write(VFS_I(dest), newlen);
+		dest->i_d.di_size = newlen;
+	}
+
+	if (cowextsize) {
+		dest->i_d.di_cowextsize = cowextsize;
+		dest->i_d.di_flags2 |= XFS_DIFLAG2_COWEXTSIZE;
+	}
+
 	xfs_trans_log_inode(tp, dest, XFS_ILOG_CORE);
 
 	error = xfs_trans_commit(tp);
@@ -1351,6 +1360,7 @@ xfs_reflink_remap_range(
 	xfs_fileoff_t		sfsbno, dfsbno;
 	xfs_filblks_t		fsblen;
 	int			error;
+	xfs_extlen_t		cowextsize;
 	bool			is_same;
 
 	if (!xfs_sb_version_hasreflink(&mp->m_sb))
@@ -1411,7 +1421,19 @@ xfs_reflink_remap_range(
 	if (error)
 		goto out_error;
 
-	error = xfs_reflink_update_dest(dest, destoff + len);
+	/*
+	 * Carry the cowextsize hint from src to dest if we're sharing the
+	 * entire source file to the entire destination file, the source file
+	 * has a cowextsize hint, and the destination file does not.
+	 */
+	cowextsize = 0;
+	if (srcoff == 0 && len == i_size_read(VFS_I(src)) &&
+	    (src->i_d.di_flags2 & XFS_DIFLAG2_COWEXTSIZE) &&
+	    destoff == 0 && len >= i_size_read(VFS_I(dest)) &&
+	    !(dest->i_d.di_flags2 & XFS_DIFLAG2_COWEXTSIZE))
+		cowextsize = src->i_d.di_cowextsize;
+
+	error = xfs_reflink_update_dest(dest, destoff + len, cowextsize);
 	if (error)
 		goto out_error;
 

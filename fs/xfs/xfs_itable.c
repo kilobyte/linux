@@ -111,6 +111,11 @@ xfs_bulkstat_one_int(
 	buf->bs_aextents = dic->di_anextents;
 	buf->bs_forkoff = XFS_IFORK_BOFF(ip);
 
+	if (dic->di_version == 3) {
+		if (dic->di_flags2 & XFS_DIFLAG2_COWEXTSIZE)
+			buf->bs_cowextsize = dic->di_cowextsize;
+	}
+
 	switch (dic->di_format) {
 	case XFS_DINODE_FMT_DEV:
 		buf->bs_rdev = ip->i_df.if_u2.if_rdev;

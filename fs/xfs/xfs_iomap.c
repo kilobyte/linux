@@ -589,7 +589,10 @@ __xfs_iomap_write_delay(
 	if (error)
 		return error;
 
-	extsz = xfs_get_extsz_hint(ip);
+	if (whichfork == XFS_COW_FORK)
+		extsz = xfs_get_cowextsz_hint(ip);
+	else
+		extsz = xfs_get_extsz_hint(ip);
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 
 	if (whichfork == XFS_DATA_FORK) {

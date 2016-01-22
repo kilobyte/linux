@@ -3665,7 +3665,13 @@ xfs_bmap_btalloc(
 	else if (mp->m_dalign)
 		stripe_align = mp->m_dalign;
 
-	align = ap->userdata ? xfs_get_extsz_hint(ap->ip) : 0;
+	if (ap->userdata) {
+		if (ap->flags & XFS_BMAPI_COWFORK)
+			align = xfs_get_cowextsz_hint(ap->ip);
+		else
+			align = xfs_get_extsz_hint(ap->ip);
+	} else
+		align = 0;
 	if (unlikely(align)) {
 		error = xfs_bmap_extsize_align(mp, &ap->got, &ap->prev,
 						align, 0, ap->eof, 0, ap->conv,
@@ -4178,7 +4184,10 @@ xfs_bmapi_reserve_delalloc(
 		alen = XFS_FILBLKS_MIN(alen, got->br_startoff - aoff);
 
 	/* Figure out the extent size, adjust alen */
-	extsz = xfs_get_extsz_hint(ip);
+	if (whichfork == XFS_COW_FORK)
+		extsz = xfs_get_cowextsz_hint(ip);
+	else
+		extsz = xfs_get_extsz_hint(ip);
 	if (extsz) {
 		error = xfs_bmap_extsize_align(mp, got, prev, extsz, rt, eof,
 					       1, 0, &aoff, &alen);
