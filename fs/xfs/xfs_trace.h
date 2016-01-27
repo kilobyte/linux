@@ -2558,6 +2558,75 @@ DEFINE_RMAPBT_EVENT(xfs_rmap_map_gtrec);
 DEFINE_RMAPBT_EVENT(xfs_rmap_convert_gtrec);
 DEFINE_RMAPBT_EVENT(xfs_rmap_find_left_neighbor_result);
 
+/* dummy definitions to avoid breaking bisectability; will be removed later */
+#ifndef XFS_AG_RESV_DUMMY
+#define XFS_AG_RESV_DUMMY
+enum xfs_ag_resv_type {
+	XFS_AG_RESV_NONE = 0,
+	XFS_AG_RESV_METADATA,
+	XFS_AG_RESV_AGFL,
+};
+struct xfs_ag_resv {
+	xfs_extlen_t	ar_reserved;
+	xfs_extlen_t	ar_asked;
+};
+#define xfs_perag_resv(...)	NULL
+#endif
+
+/* per-AG reservation */
+DECLARE_EVENT_CLASS(xfs_ag_resv_class,
+	TP_PROTO(struct xfs_perag *pag, enum xfs_ag_resv_type resv,
+		 xfs_extlen_t len),
+	TP_ARGS(pag, resv, len),
+	TP_STRUCT__entry(
+		__field(dev_t, dev)
+		__field(xfs_agnumber_t, agno)
+		__field(int, resv)
+		__field(xfs_extlen_t, freeblks)
+		__field(xfs_extlen_t, flcount)
+		__field(xfs_extlen_t, reserved)
+		__field(xfs_extlen_t, asked)
+		__field(xfs_extlen_t, len)
+	),
+	TP_fast_assign(
+		struct xfs_ag_resv	*r = xfs_perag_resv(pag, resv);
+
+		__entry->dev = pag->pag_mount->m_super->s_dev;
+		__entry->agno = pag->pag_agno;
+		__entry->resv = resv;
+		__entry->freeblks = pag->pagf_freeblks;
+		__entry->flcount = pag->pagf_flcount;
+		__entry->reserved = r ? r->ar_reserved : 0;
+		__entry->asked = r ? r->ar_asked : 0;
+		__entry->len = len;
+	),
+	TP_printk("dev %d:%d agno %u resv %d freeblks %u flcount %u resv %u ask %u len %u\n",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->agno,
+		  __entry->resv,
+		  __entry->freeblks,
+		  __entry->flcount,
+		  __entry->reserved,
+		  __entry->asked,
+		  __entry->len)
+)
+#define DEFINE_AG_RESV_EVENT(name) \
+DEFINE_EVENT(xfs_ag_resv_class, name, \
+	TP_PROTO(struct xfs_perag *pag, enum xfs_ag_resv_type type, \
+		 xfs_extlen_t len), \
+	TP_ARGS(pag, type, len))
+
+/* per-AG reservation tracepoints */
+DEFINE_AG_RESV_EVENT(xfs_ag_resv_init);
+DEFINE_AG_RESV_EVENT(xfs_ag_resv_free);
+DEFINE_AG_RESV_EVENT(xfs_ag_resv_alloc_extent);
+DEFINE_AG_RESV_EVENT(xfs_ag_resv_free_extent);
+DEFINE_AG_RESV_EVENT(xfs_ag_resv_critical);
+DEFINE_AG_RESV_EVENT(xfs_ag_resv_needed);
+
+DEFINE_AG_ERROR_EVENT(xfs_ag_resv_free_error);
+DEFINE_AG_ERROR_EVENT(xfs_ag_resv_init_error);
+
 #endif /* _TRACE_XFS_H */
 
 #undef TRACE_INCLUDE_PATH
