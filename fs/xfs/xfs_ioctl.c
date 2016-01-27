@@ -41,6 +41,7 @@
 #include "xfs_trans.h"
 #include "xfs_pnfs.h"
 #include "xfs_acl.h"
+#include "xfs_reflink.h"
 
 #include <linux/capability.h>
 #include <linux/dcache.h>
@@ -49,6 +50,7 @@
 #include <linux/pagemap.h>
 #include <linux/slab.h>
 #include <linux/exportfs.h>
+#include <linux/fsnotify.h>
 
 /*
  * xfs_find_handle maps from userspace xfs_fsop_handlereq structure to
