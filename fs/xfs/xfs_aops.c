@@ -668,10 +668,12 @@ xfs_check_page_type(
 	bh = head = page_buffers(page);
 	do {
 		if (buffer_unwritten(bh)) {
-			if (type == XFS_IO_UNWRITTEN)
+			if (type == XFS_IO_UNWRITTEN ||
+			    type == XFS_IO_COW)
 				return true;
 		} else if (buffer_delay(bh)) {
-			if (type == XFS_IO_DELALLOC)
+			if (type == XFS_IO_DELALLOC ||
+			    type == XFS_IO_COW)
 				return true;
 		} else if (buffer_dirty(bh) && buffer_mapped(bh)) {
 			if (type == XFS_IO_OVERWRITE ||
@@ -836,25 +838,13 @@ xfs_writepage_map(
 			continue;
 		}
 
-		if (buffer_unwritten(bh)) {
-			if (wpc->io_type != XFS_IO_UNWRITTEN) {
-				wpc->io_type = XFS_IO_UNWRITTEN;
-				wpc->imap_valid = false;
-			}
-		} else if (buffer_delay(bh)) {
-			if (wpc->io_type != XFS_IO_DELALLOC) {
-				wpc->io_type = XFS_IO_DELALLOC;
-				wpc->imap_valid = false;
-			}
-		} else if (buffer_uptodate(bh)) {
-			new_type = xfs_is_cow_io(XFS_I(inode), offset) ?
-					XFS_IO_COW : XFS_IO_OVERWRITE;
-
-			if (wpc->io_type != new_type) {
-				wpc->io_type = new_type;
-				wpc->imap_valid = false;
-			}
-		} else {
+		if (buffer_unwritten(bh))
+			new_type = XFS_IO_UNWRITTEN;
+		else if (buffer_delay(bh))
+			new_type = XFS_IO_DELALLOC;
+		else if (buffer_uptodate(bh))
+			new_type = XFS_IO_OVERWRITE;
+		else {
 			if (PageUptodate(page))
 				ASSERT(buffer_mapped(bh));
 			/*
@@ -865,6 +855,13 @@ xfs_writepage_map(
 			 */
 			wpc->imap_valid = false;
 			continue;
+		}
+
+		if (xfs_is_cow_io(XFS_I(inode), offset))
+			new_type = XFS_IO_COW;
+		if (wpc->io_type != new_type) {
+			wpc->io_type = new_type;
+			wpc->imap_valid = false;
 		}
 
 		if (wpc->imap_valid)
