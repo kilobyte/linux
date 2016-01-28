@@ -56,6 +56,8 @@ extern void xfs_reflink_get_lxflags(struct xfs_inode *ip, unsigned int *flags);
 extern int xfs_reflink_check_flag_adjust(struct xfs_inode *ip,
 		unsigned int *xflags);
 
+extern bool xfs_reflink_has_real_cow_blocks(struct xfs_inode *ip);
+
 /* xfs_aops.c */
 extern int xfs_map_cow_blocks(struct inode *inode, xfs_off_t offset,
 		struct xfs_bmbt_irec *imap);

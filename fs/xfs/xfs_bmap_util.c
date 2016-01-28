@@ -1222,6 +1222,7 @@ xfs_free_cow_space(
 	 */
 	if (ip->i_d.di_nblocks == 0) {
 		ip->i_d.di_flags2 &= ~XFS_DIFLAG2_REFLINK;
+		xfs_inode_clear_cowblocks_tag(ip);
 		xfs_trans_log_inode(*tpp, ip, XFS_ILOG_CORE);
 	}
 out:
@@ -1966,6 +1967,8 @@ xfs_swap_extents(
 		cowfp = ip->i_cowfp;
 		ip->i_cowfp = tip->i_cowfp;
 		tip->i_cowfp = cowfp;
+		xfs_inode_set_cowblocks_tag(ip);
+		xfs_inode_set_cowblocks_tag(tip);
 	}
 
 	xfs_trans_log_inode(tp, ip,  src_log_flags);

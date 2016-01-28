@@ -668,6 +668,8 @@ retry:
 	 */
 	if (prealloc)
 		xfs_inode_set_eofblocks_tag(ip);
+	if (whichfork == XFS_COW_FORK && extsz > 0)
+		xfs_inode_set_cowblocks_tag(ip);
 
 	*ret_imap = imap[0];
 	return 0;
