@@ -1571,6 +1571,10 @@ xfs_fs_fill_super(
 		xfs_alert(mp,
 	"EXPERIMENTAL sparse inode feature enabled. Use at your own risk!");
 
+	if (xfs_sb_version_hasrmapbt(&mp->m_sb))
+		xfs_alert(mp,
+	"EXPERIMENTAL reverse mapping btree feature enabled. Use at your own risk!");
+
 	error = xfs_mountfs(mp);
 	if (error)
 		goto out_filestream_unmount;
