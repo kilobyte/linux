@@ -193,6 +193,17 @@ static struct ctl_table xfs_table[] = {
 		.extra1		= &xfs_params.cowb_timer.min,
 		.extra2		= &xfs_params.cowb_timer.max,
 	},
+#ifdef DEBUG
+	{
+		.procname	= "always_cow",
+		.data		= &xfs_params.always_cow.val,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= &xfs_params.always_cow.min,
+		.extra2		= &xfs_params.always_cow.max,
+	},
+#endif
 	/* please keep this the last entry */
 #ifdef CONFIG_PROC_FS
 	{

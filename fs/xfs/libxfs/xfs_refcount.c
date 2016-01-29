@@ -1190,6 +1190,12 @@ xfs_refcount_find_shared(
 
 	trace_xfs_refcount_find_shared(mp, agno, agbno, aglen);
 
+	if (xfs_always_cow) {
+		*fbno = agbno;
+		*flen = aglen;
+		return 0;
+	}
+
 	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
 	if (error)
 		goto out;
