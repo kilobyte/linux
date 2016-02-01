@@ -4156,3 +4156,30 @@ xfs_btree_sblock_verify(
 
 	return true;
 }
+
+/*
+ * Calculate the number of blocks needed to store a given number of records
+ * in a short-format (per-AG metadata) btree.
+ */
+xfs_extlen_t
+xfs_btree_calc_size(
+	struct xfs_mount	*mp,
+	uint			*limits,
+	unsigned long long	len)
+{
+	int			level;
+	int			maxrecs;
+	xfs_extlen_t		rval;
+
+	maxrecs = limits[0];
+	for (level = 0, rval = 0; len > 0; level++) {
+		len += maxrecs - 1;
+		do_div(len, maxrecs);
+		rval += len;
+		if (len == 1)
+			return rval;
+		if (level == 0)
+			maxrecs = limits[1];
+	}
+	return rval;
+}
