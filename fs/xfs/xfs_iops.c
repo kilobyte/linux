@@ -1025,6 +1025,8 @@ xfs_fiemap_format(
 
 	if (bmv->bmv_oflags & BMV_OF_PREALLOC)
 		fiemap_flags |= FIEMAP_EXTENT_UNWRITTEN;
+	else if (bmv->bmv_oflags & BMV_OF_SHARED)
+		fiemap_flags |= FIEMAP_EXTENT_SHARED;
 	else if (bmv->bmv_oflags & BMV_OF_DELALLOC) {
 		fiemap_flags |= (FIEMAP_EXTENT_DELALLOC |
 				 FIEMAP_EXTENT_UNKNOWN);

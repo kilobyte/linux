@@ -44,6 +44,7 @@
 #include "xfs_rmap_btree.h"
 #include "xfs_iomap.h"
 #include "xfs_reflink.h"
+#include "xfs_refcount.h"
 
 /* Kernel only BMAP related definitions and functions */
 
@@ -391,6 +392,7 @@ xfs_bmap_count_blocks(
 STATIC int
 xfs_getbmapx_fix_eof_hole(
 	xfs_inode_t		*ip,		/* xfs incore inode pointer */
+	int			whichfork,
 	struct getbmapx		*out,		/* output structure */
 	int			prealloced,	/* this is a file with
 						 * preallocated data space */
@@ -420,7 +422,7 @@ xfs_getbmapx_fix_eof_hole(
 		else
 			out->bmv_block = xfs_fsb_to_db(ip, startblock);
 		fileblock = XFS_BB_TO_FSB(ip->i_mount, out->bmv_offset);
-		ifp = XFS_IFORK_PTR(ip, XFS_DATA_FORK);
+		ifp = XFS_IFORK_PTR(ip, whichfork);
 		if (xfs_iext_bno_to_ext(ifp, fileblock, &lastx) &&
 		   (lastx == (ifp->if_bytes / (uint)sizeof(xfs_bmbt_rec_t))-1))
 			out->bmv_oflags |= BMV_OF_LAST;
@@ -464,9 +466,19 @@ xfs_getbmap(
 
 	mp = ip->i_mount;
 	iflags = bmv->bmv_iflags;
-	whichfork = iflags & BMV_IF_ATTRFORK ? XFS_ATTR_FORK : XFS_DATA_FORK;
 
-	if (whichfork == XFS_ATTR_FORK) {
+	if ((iflags & BMV_IF_ATTRFORK) && (iflags & BMV_IF_COWFORK))
+		return -EINVAL;
+
+	if (iflags & BMV_IF_ATTRFORK)
+		whichfork = XFS_ATTR_FORK;
+	else if (iflags & BMV_IF_COWFORK)
+		whichfork = XFS_COW_FORK;
+	else
+		whichfork = XFS_DATA_FORK;
+
+	switch (whichfork) {
+	case XFS_ATTR_FORK:
 		if (XFS_IFORK_Q(ip)) {
 			if (ip->i_d.di_aformat != XFS_DINODE_FMT_EXTENTS &&
 			    ip->i_d.di_aformat != XFS_DINODE_FMT_BTREE &&
@@ -482,7 +494,15 @@ xfs_getbmap(
 
 		prealloced = 0;
 		fixlen = 1LL << 32;
-	} else {
+		break;
+	case XFS_COW_FORK:
+		if (ip->i_cformat != XFS_DINODE_FMT_EXTENTS)
+			return -EINVAL;
+
+		prealloced = 0;
+		fixlen = XFS_ISIZE(ip);
+		break;
+	default:
 		if (ip->i_d.di_format != XFS_DINODE_FMT_EXTENTS &&
 		    ip->i_d.di_format != XFS_DINODE_FMT_BTREE &&
 		    ip->i_d.di_format != XFS_DINODE_FMT_LOCAL)
@@ -496,6 +516,7 @@ xfs_getbmap(
 			prealloced = 0;
 			fixlen = XFS_ISIZE(ip);
 		}
+		break;
 	}
 
 	if (bmv->bmv_length == -1) {
@@ -522,7 +543,8 @@ xfs_getbmap(
 		return -ENOMEM;
 
 	xfs_ilock(ip, XFS_IOLOCK_SHARED);
-	if (whichfork == XFS_DATA_FORK) {
+	switch (whichfork) {
+	case XFS_DATA_FORK:
 		if (!(iflags & BMV_IF_DELALLOC) &&
 		    (ip->i_delayed_blks || XFS_ISIZE(ip) > ip->i_d.di_size)) {
 			error = filemap_write_and_wait(VFS_I(ip)->i_mapping);
@@ -540,8 +562,14 @@ xfs_getbmap(
 		}
 
 		lock = xfs_ilock_data_map_shared(ip);
-	} else {
+		break;
+	case XFS_COW_FORK:
+		lock = XFS_ILOCK_SHARED;
+		xfs_ilock(ip, lock);
+		break;
+	case XFS_ATTR_FORK:
 		lock = xfs_ilock_attr_map_shared(ip);
+		break;
 	}
 
 	/*
@@ -616,8 +644,30 @@ xfs_getbmap(
 				goto out_free_map;
 			}
 
-			if (!xfs_getbmapx_fix_eof_hole(ip, &out[cur_ext],
-					prealloced, bmvend,
+			/* Is this a shared block? */
+			if (whichfork == XFS_DATA_FORK &&
+			    map[i].br_startblock != DELAYSTARTBLOCK &&
+			    map[i].br_startblock != HOLESTARTBLOCK &&
+			    !ISUNWRITTEN(&map[i]) && xfs_is_reflink_inode(ip)) {
+				xfs_agblock_t	ebno;
+				xfs_extlen_t	elen;
+
+				error = xfs_refcount_find_shared(mp,
+						XFS_FSB_TO_AGNO(mp,
+							map[i].br_startblock),
+						XFS_FSB_TO_AGBNO(mp,
+							map[i].br_startblock),
+						map[i].br_blockcount,
+						&ebno, &elen, true);
+				if (error)
+					goto out_free_map;
+				if (elen)
+					out[cur_ext].bmv_oflags |=
+							BMV_OF_SHARED;
+			}
+
+			if (!xfs_getbmapx_fix_eof_hole(ip, whichfork,
+					&out[cur_ext], prealloced, bmvend,
 					map[i].br_startblock))
 				goto out_free_map;
 
