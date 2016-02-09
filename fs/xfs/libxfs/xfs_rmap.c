@@ -1346,6 +1346,8 @@ __xfs_rmap_add(
 
 	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
 		return 0;
+	if (ri->ri_whichfork == XFS_COW_FORK)
+		return 0;
 
 	trace_xfs_rmap_defer(mp, XFS_FSB_TO_AGNO(mp, ri->ri_bmap.br_startblock),
 			ri->ri_type,
