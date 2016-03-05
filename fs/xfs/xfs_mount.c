@@ -46,6 +46,7 @@
 #include "xfs_refcount_btree.h"
 #include "xfs_reflink.h"
 #include "xfs_refcount_btree.h"
+#include "xfs_scrub_sysfs.h"
 
 
 static DEFINE_MUTEX(xfs_uuid_table_mutex);
@@ -705,10 +706,13 @@ xfs_mountfs(
 	if (error)
 		goto out_del_stats;
 
+	error = xfs_scrub_init(mp);
+	if (error)
+		goto out_remove_error_sysfs;
 
 	error = xfs_uuid_mount(mp);
 	if (error)
-		goto out_remove_error_sysfs;
+		goto out_remove_scrub;
 
 	/*
 	 * Set the minimum read and write sizes
@@ -993,6 +997,8 @@ xfs_mountfs(
 	xfs_da_unmount(mp);
  out_remove_uuid:
 	xfs_uuid_unmount(mp);
+ out_remove_scrub:
+	xfs_scrub_free(mp);
  out_remove_error_sysfs:
 	xfs_error_sysfs_del(mp);
  out_del_stats:
@@ -1093,6 +1099,7 @@ xfs_unmountfs(
 #endif
 	xfs_free_perag(mp);
 
+	xfs_scrub_free(mp);
 	xfs_error_sysfs_del(mp);
 	xfs_sysfs_del(&mp->m_stats.xs_kobj);
 	xfs_sysfs_del(&mp->m_kobj);

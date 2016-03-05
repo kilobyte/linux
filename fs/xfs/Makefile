@@ -93,6 +93,7 @@ xfs-y				+= xfs_aops.o \
 				   xfs_mount.o \
 				   xfs_mru_cache.o \
 				   xfs_reflink.o \
+				   xfs_scrub_sysfs.o \
 				   xfs_stats.o \
 				   xfs_super.o \
 				   xfs_symlink.o \
