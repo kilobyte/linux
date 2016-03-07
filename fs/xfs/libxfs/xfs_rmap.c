@@ -38,6 +38,7 @@
 #include "xfs_extent_busy.h"
 #include "xfs_bmap.h"
 #include "xfs_inode.h"
+#include "xfs_scrub.h"
 
 /*
  * Lookup the first record less than or equal to [bno, len, owner, offset]
@@ -2366,4 +2367,80 @@ xfs_rmap_record_exists(
 	*has_rmap = (irec.rm_startblock <= bno &&
 		     irec.rm_startblock + irec.rm_blockcount >= bno + len);
 	return 0;
+}
+
+STATIC int
+xfs_rmapbt_scrub_helper(
+	struct xfs_btree_scrub		*bs,
+	union xfs_btree_rec		*rec)
+{
+	struct xfs_mount		*mp = bs->cur->bc_mp;
+	struct xfs_rmap_irec		irec;
+	bool				is_freesp;
+	bool				non_inode;
+	bool				is_unwritten;
+	bool				is_bmbt;
+	bool				is_attr;
+	int				error;
+
+	error = xfs_rmapbt_btrec_to_irec(rec, &irec);
+	if (error)
+		return error;
+
+	XFS_BTREC_SCRUB_CHECK(bs, irec.rm_startblock < mp->m_sb.sb_agblocks)
+	XFS_BTREC_SCRUB_CHECK(bs, irec.rm_startblock < irec.rm_startblock +
+			irec.rm_blockcount);
+	XFS_BTREC_SCRUB_CHECK(bs, (unsigned long long)irec.rm_startblock +
+			irec.rm_blockcount <= mp->m_sb.sb_agblocks)
+
+	non_inode = XFS_RMAP_NON_INODE_OWNER(irec.rm_owner);
+	is_bmbt = irec.rm_flags & XFS_RMAP_ATTR_FORK;
+	is_attr = irec.rm_flags & XFS_RMAP_BMBT_BLOCK;
+	is_unwritten = irec.rm_flags & XFS_RMAP_UNWRITTEN;
+
+	XFS_BTREC_SCRUB_CHECK(bs, !is_bmbt || irec.rm_offset == 0);
+	XFS_BTREC_SCRUB_CHECK(bs, !non_inode || irec.rm_offset == 0);
+	XFS_BTREC_SCRUB_CHECK(bs, !is_unwritten || !(is_bmbt || non_inode ||
+			is_attr));
+	XFS_BTREC_SCRUB_CHECK(bs, !non_inode || !(is_bmbt || is_unwritten ||
+			is_attr));
+
+	/* check there's no record in freesp btrees */
+	error = xfs_alloc_record_exists(bs->bno_cur, irec.rm_startblock,
+			irec.rm_blockcount, &is_freesp);
+	if (error)
+		goto err;
+	XFS_BTREC_SCRUB_CHECK(bs, !is_freesp);
+
+	/* XXX: check with the owner */
+
+err:
+	return error;
+}
+
+/* Scrub the rmap btree for some AG. */
+int
+xfs_rmapbt_scrub(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+	struct xfs_btree_scrub	bs;
+	int			error;
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &bs.agf_bp);
+	if (error)
+		return error;
+
+	bs.cur = xfs_rmapbt_init_cursor(mp, NULL, bs.agf_bp, agno);
+	bs.scrub_rec = xfs_rmapbt_scrub_helper;
+	xfs_rmap_ag_owner(&bs.oinfo, XFS_RMAP_OWN_AG);
+	error = xfs_btree_scrub(&bs);
+	xfs_btree_del_cursor(bs.cur,
+			error ? XFS_BTREE_ERROR : XFS_BTREE_NOERROR);
+	xfs_trans_brelse(NULL, bs.agf_bp);
+
+	if (!error && bs.error)
+		error = bs.error;
+
+	return error;
 }

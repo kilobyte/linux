@@ -147,4 +147,6 @@ extern int xfs_rmapbt_calc_reserves(struct xfs_mount *mp,
 extern int xfs_rmap_record_exists(struct xfs_btree_cur *cur, xfs_agblock_t bno,
 		xfs_extlen_t len, struct xfs_owner_info *oinfo, bool *has_rmap);
 
+int xfs_rmapbt_scrub(struct xfs_mount *mp, xfs_agnumber_t agno);
+
 #endif	/* __XFS_RMAP_BTREE_H__ */
