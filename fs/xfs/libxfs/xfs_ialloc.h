@@ -168,5 +168,7 @@ int xfs_ialloc_inode_init(struct xfs_mount *mp, struct xfs_trans *tp,
 int xfs_read_agi(struct xfs_mount *mp, struct xfs_trans *tp,
 		xfs_agnumber_t agno, struct xfs_buf **bpp);
 
+extern int xfs_inobt_scrub(struct xfs_mount *mp, xfs_agnumber_t agno);
+extern int xfs_finobt_scrub(struct xfs_mount *mp, xfs_agnumber_t agno);
 
 #endif	/* __XFS_IALLOC_H__ */
