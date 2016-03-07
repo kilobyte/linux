@@ -39,6 +39,7 @@
 #include "xfs_log.h"
 #include "xfs_ag_resv.h"
 #include "xfs_refcount_btree.h"
+#include "xfs_scrub.h"
 
 struct workqueue_struct *xfs_alloc_wq;
 
@@ -2956,4 +2957,101 @@ xfs_alloc_record_exists(
 
 	*is_freesp = (fbno <= bno && fbno + flen >= bno + len);
 	return 0;
+}
+
+STATIC int
+xfs_allocbt_scrub_rmap_check(
+	struct xfs_btree_cur		*cur,
+	struct xfs_rmap_irec		*rec,
+	void				*priv)
+{
+	xfs_err(cur->bc_mp, "%s: freespace in rmapbt! %u/%u %u %lld %lld %x",
+			__func__, cur->bc_private.a.agno, rec->rm_startblock,
+			rec->rm_blockcount, rec->rm_owner, rec->rm_offset,
+			rec->rm_flags);
+	return XFS_BTREE_QUERY_RANGE_ABORT;
+}
+
+STATIC int
+xfs_allocbt_scrub_helper(
+	struct xfs_btree_scrub		*bs,
+	union xfs_btree_rec		*rec)
+{
+	struct xfs_mount		*mp = bs->cur->bc_mp;
+	xfs_agblock_t			bno;
+	xfs_extlen_t			len;
+	struct xfs_rmap_irec		low;
+	struct xfs_rmap_irec		high;
+	bool				no_rmap;
+	int				error;
+
+	bno = be32_to_cpu(rec->alloc.ar_startblock);
+	len = be32_to_cpu(rec->alloc.ar_blockcount);
+
+	XFS_BTREC_SCRUB_CHECK(bs, bno <= mp->m_sb.sb_agblocks);
+	XFS_BTREC_SCRUB_CHECK(bs, bno < bno + len);
+	XFS_BTREC_SCRUB_CHECK(bs, (unsigned long long)bno + len <=
+			mp->m_sb.sb_agblocks);
+
+	/* if rmapbt, make sure there's no record */
+	if (!bs->rmap_cur)
+		return 0;
+
+	memset(&low, 0, sizeof(low));
+	low.rm_startblock = bno;
+	memset(&high, 0xFF, sizeof(high));
+	high.rm_startblock = bno + len - 1;
+
+	error = xfs_rmapbt_query_range(bs->rmap_cur, &low, &high,
+			&xfs_allocbt_scrub_rmap_check, NULL);
+	if (error && error != XFS_BTREE_QUERY_RANGE_ABORT)
+		goto err;
+	no_rmap = error == 0;
+	XFS_BTREC_SCRUB_CHECK(bs, no_rmap);
+err:
+	return error;
+}
+
+/* Scrub the freespace btrees for some AG. */
+STATIC int
+xfs_allocbt_scrub(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	int			which)
+{
+	struct xfs_btree_scrub	bs;
+	int			error;
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &bs.agf_bp);
+	if (error)
+		return error;
+
+	bs.cur = xfs_allocbt_init_cursor(mp, NULL, bs.agf_bp, agno, which);
+	bs.scrub_rec = xfs_allocbt_scrub_helper;
+	xfs_rmap_ag_owner(&bs.oinfo, XFS_RMAP_OWN_AG);
+	error = xfs_btree_scrub(&bs);
+	xfs_btree_del_cursor(bs.cur,
+			error ? XFS_BTREE_ERROR : XFS_BTREE_NOERROR);
+	xfs_trans_brelse(NULL, bs.agf_bp);
+
+	if (!error && bs.error)
+		error = bs.error;
+
+	return error;
+}
+
+int
+xfs_bnobt_scrub(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+	return xfs_allocbt_scrub(mp, agno, XFS_BTNUM_BNO);
+}
+
+int
+xfs_cntbt_scrub(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+	return xfs_allocbt_scrub(mp, agno, XFS_BTNUM_CNT);
 }

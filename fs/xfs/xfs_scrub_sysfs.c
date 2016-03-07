@@ -174,7 +174,12 @@ static struct xfs_agdata_scrub_attr xfs_agdata_scrub_attr_##_name = {	     \
 }
 #define XFS_AGDATA_SCRUB_LIST(name)	&xfs_agdata_scrub_attr_##name.sa.attr
 
+XFS_AGDATA_SCRUB_ATTR(bnobt, NULL);
+XFS_AGDATA_SCRUB_ATTR(cntbt, NULL);
+
 static struct attribute *xfs_agdata_scrub_attrs[] = {
+	XFS_AGDATA_SCRUB_LIST(bnobt),
+	XFS_AGDATA_SCRUB_LIST(cntbt),
 	NULL,
 };
 
