@@ -179,6 +179,7 @@ XFS_AGDATA_SCRUB_ATTR(cntbt, NULL);
 XFS_AGDATA_SCRUB_ATTR(inobt, NULL);
 XFS_AGDATA_SCRUB_ATTR(finobt, xfs_sb_version_hasfinobt);
 XFS_AGDATA_SCRUB_ATTR(rmapbt, xfs_sb_version_hasrmapbt);
+XFS_AGDATA_SCRUB_ATTR(refcountbt, xfs_sb_version_hasreflink);
 
 static struct attribute *xfs_agdata_scrub_attrs[] = {
 	XFS_AGDATA_SCRUB_LIST(bnobt),
@@ -186,6 +187,7 @@ static struct attribute *xfs_agdata_scrub_attrs[] = {
 	XFS_AGDATA_SCRUB_LIST(inobt),
 	XFS_AGDATA_SCRUB_LIST(finobt),
 	XFS_AGDATA_SCRUB_LIST(rmapbt),
+	XFS_AGDATA_SCRUB_LIST(refcountbt),
 	NULL,
 };
 

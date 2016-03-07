@@ -37,6 +37,7 @@
 #include "xfs_bit.h"
 #include "xfs_refcount.h"
 #include "xfs_rmap_btree.h"
+#include "xfs_scrub.h"
 
 /* Allowable refcount adjustment amounts. */
 enum xfs_refc_adjust_op {
@@ -1577,4 +1578,227 @@ xfs_refcount_free_cow_extent(
 	ri.ri_blockcount = len;
 
 	return __xfs_refcount_add(mp, dfops, &ri);
+}
+
+struct xfs_refcountbt_scrub_fragment {
+	struct xfs_rmap_irec		rm;
+	struct list_head		list;
+};
+
+struct xfs_refcountbt_scrub_rmap_check_info {
+	xfs_nlink_t			nr;
+	struct xfs_refcount_irec	rc;
+	struct list_head		fragments;
+};
+
+static int
+xfs_refcountbt_scrub_rmap_check(
+	struct xfs_btree_cur		*cur,
+	struct xfs_rmap_irec		*rec,
+	void				*priv)
+{
+	struct xfs_refcountbt_scrub_rmap_check_info	*rsrci = priv;
+	struct xfs_refcountbt_scrub_fragment		*frag;
+	xfs_agblock_t			rm_last;
+	xfs_agblock_t			rc_last;
+
+	rm_last = rec->rm_startblock + rec->rm_blockcount;
+	rc_last = rsrci->rc.rc_startblock + rsrci->rc.rc_blockcount;
+	if (rec->rm_startblock <= rsrci->rc.rc_startblock && rm_last >= rc_last)
+		rsrci->nr++;
+	else {
+		frag = kmem_zalloc(sizeof(struct xfs_refcountbt_scrub_fragment),
+				KM_SLEEP);
+		frag->rm = *rec;
+		list_add_tail(&frag->list, &rsrci->fragments);
+	}
+
+	return 0;
+}
+
+STATIC void
+xfs_refcountbt_process_rmap_fragments(
+	struct xfs_mount				*mp,
+	struct xfs_refcountbt_scrub_rmap_check_info	*rsrci)
+{
+	struct list_head				worklist;
+	struct xfs_refcountbt_scrub_fragment		*cur;
+	struct xfs_refcountbt_scrub_fragment		*n;
+	xfs_agblock_t					bno;
+	xfs_agblock_t					rbno;
+	xfs_agblock_t					next_rbno;
+	xfs_nlink_t					nr;
+	xfs_nlink_t					target_nr;
+
+	target_nr = rsrci->rc.rc_refcount - rsrci->nr;
+	if (target_nr == 0)
+		return;
+
+	/*
+	 * There are (rsrci->rc.rc_refcount - rsrci->nr refcount)
+	 * references we haven't found yet.  Pull that many off the
+	 * fragment list and figure out where the smallest rmap ends
+	 * (and therefore the next rmap should start).  All the rmaps
+	 * we pull off should start at or before the beginning of the
+	 * refcount record's range.
+	 */
+	INIT_LIST_HEAD(&worklist);
+	rbno = NULLAGBLOCK;
+	nr = 1;
+	list_for_each_entry_safe(cur, n, &rsrci->fragments, list) {
+		if (cur->rm.rm_startblock > rsrci->rc.rc_startblock)
+			goto fail;
+		bno = cur->rm.rm_startblock + cur->rm.rm_blockcount;
+		if (rbno > bno)
+			rbno = bno;
+		list_del(&cur->list);
+		list_add_tail(&cur->list, &worklist);
+		if (nr == target_nr)
+			break;
+		nr++;
+	}
+
+	if (nr != target_nr)
+		goto fail;
+
+	while (!list_empty(&rsrci->fragments)) {
+		/* Discard any fragments ending at rbno. */
+		nr = 0;
+		next_rbno = NULLAGBLOCK;
+		list_for_each_entry_safe(cur, n, &worklist, list) {
+			bno = cur->rm.rm_startblock + cur->rm.rm_blockcount;
+			if (bno != rbno) {
+				if (next_rbno > bno)
+					next_rbno = bno;
+				continue;
+			}
+			list_del(&cur->list);
+			kmem_free(cur);
+			nr++;
+		}
+
+		/* Empty list?  We're done. */
+		if (list_empty(&rsrci->fragments))
+			break;
+
+		/* Try to add nr rmaps starting at rbno to the worklist. */
+		list_for_each_entry_safe(cur, n, &rsrci->fragments, list) {
+			bno = cur->rm.rm_startblock + cur->rm.rm_blockcount;
+			if (cur->rm.rm_startblock != rbno)
+				goto fail;
+			list_del(&cur->list);
+			list_add_tail(&cur->list, &worklist);
+			if (next_rbno > bno)
+				next_rbno = bno;
+			nr--;
+			if (nr == 0)
+				break;
+		}
+
+		rbno = next_rbno;
+	}
+
+	/*
+	 * Make sure the last extent we processed ends at or beyond
+	 * the end of the refcount extent.
+	 */
+	if (rbno < rsrci->rc.rc_startblock + rsrci->rc.rc_blockcount)
+		goto fail;
+
+	rsrci->nr = rsrci->rc.rc_refcount;
+fail:
+	/* Delete fragments and work list. */
+	while (!list_empty(&worklist)) {
+		cur = list_first_entry(&worklist,
+				struct xfs_refcountbt_scrub_fragment, list);
+		list_del(&cur->list);
+		kmem_free(cur);
+	}
+	while (!list_empty(&rsrci->fragments)) {
+		cur = list_first_entry(&rsrci->fragments,
+				struct xfs_refcountbt_scrub_fragment, list);
+		list_del(&cur->list);
+		kmem_free(cur);
+	}
+}
+
+STATIC int
+xfs_refcountbt_scrub_helper(
+	struct xfs_btree_scrub		*bs,
+	union xfs_btree_rec		*rec)
+{
+	struct xfs_mount		*mp = bs->cur->bc_mp;
+	struct xfs_rmap_irec		low;
+	struct xfs_rmap_irec		high;
+	struct xfs_refcount_irec	irec;
+	struct xfs_refcountbt_scrub_rmap_check_info	rsrci;
+	struct xfs_refcountbt_scrub_fragment		*cur;
+	int				error;
+
+	irec.rc_startblock = be32_to_cpu(rec->refc.rc_startblock);
+	irec.rc_blockcount = be32_to_cpu(rec->refc.rc_blockcount);
+	irec.rc_refcount = be32_to_cpu(rec->refc.rc_refcount);
+
+	XFS_BTREC_SCRUB_CHECK(bs, irec.rc_startblock < mp->m_sb.sb_agblocks);
+	XFS_BTREC_SCRUB_CHECK(bs, irec.rc_startblock < irec.rc_startblock +
+			irec.rc_blockcount);
+	XFS_BTREC_SCRUB_CHECK(bs, (unsigned long long)irec.rc_startblock +
+			irec.rc_blockcount <= mp->m_sb.sb_agblocks);
+	XFS_BTREC_SCRUB_CHECK(bs, irec.rc_refcount >= 1);
+
+	/* confirm the refcount */
+	if (!bs->rmap_cur)
+		return 0;
+
+	memset(&low, 0, sizeof(low));
+	low.rm_startblock = irec.rc_startblock;
+	memset(&high, 0xFF, sizeof(high));
+	high.rm_startblock = irec.rc_startblock + irec.rc_blockcount - 1;
+
+	rsrci.nr = 0;
+	rsrci.rc = irec;
+	INIT_LIST_HEAD(&rsrci.fragments);
+	error = xfs_rmapbt_query_range(bs->rmap_cur, &low, &high,
+			&xfs_refcountbt_scrub_rmap_check, &rsrci);
+	if (error && error != XFS_BTREE_QUERY_RANGE_ABORT)
+		goto err;
+	error = 0;
+	xfs_refcountbt_process_rmap_fragments(mp, &rsrci);
+	XFS_BTREC_SCRUB_CHECK(bs, irec.rc_refcount == rsrci.nr);
+
+err:
+	while (!list_empty(&rsrci.fragments)) {
+		cur = list_first_entry(&rsrci.fragments,
+				struct xfs_refcountbt_scrub_fragment, list);
+		list_del(&cur->list);
+		kmem_free(cur);
+	}
+	return error;
+}
+
+/* Scrub the refcount btree for some AG. */
+int
+xfs_refcountbt_scrub(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+	struct xfs_btree_scrub	bs;
+	int			error;
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &bs.agf_bp);
+	if (error)
+		return error;
+
+	bs.cur = xfs_refcountbt_init_cursor(mp, NULL, bs.agf_bp, agno, NULL);
+	bs.scrub_rec = xfs_refcountbt_scrub_helper;
+	xfs_rmap_ag_owner(&bs.oinfo, XFS_RMAP_OWN_REFC);
+	error = xfs_btree_scrub(&bs);
+	xfs_btree_del_cursor(bs.cur,
+			error ? XFS_BTREE_ERROR : XFS_BTREE_NOERROR);
+	xfs_trans_brelse(NULL, bs.agf_bp);
+
+	if (!error && bs.error)
+		error = bs.error;
+
+	return error;
 }
