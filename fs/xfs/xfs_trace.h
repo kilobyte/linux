@@ -3428,6 +3428,46 @@ DEFINE_GETFSMAP_EVENT(xfs_getfsmap_low_key);
 DEFINE_GETFSMAP_EVENT(xfs_getfsmap_high_key);
 DEFINE_GETFSMAP_EVENT(xfs_getfsmap_mapping);
 
+/* scrub */
+DECLARE_EVENT_CLASS(xfs_scrub_sbtree_class,
+	TP_PROTO(struct xfs_mount *mp, xfs_agnumber_t agno, xfs_agblock_t bno,
+		 xfs_btnum_t btnum, int level, int nlevels, int ptr),
+	TP_ARGS(mp, agno, bno, btnum, level, nlevels, ptr),
+	TP_STRUCT__entry(
+		__field(dev_t, dev)
+		__field(xfs_btnum_t, btnum)
+		__field(xfs_agnumber_t, agno)
+		__field(xfs_agblock_t, bno)
+		__field(int, level)
+		__field(int, nlevels)
+		__field(int, ptr)
+	),
+	TP_fast_assign(
+		__entry->dev = mp->m_super->s_dev;
+		__entry->agno = agno;
+		__entry->btnum = btnum;
+		__entry->bno = bno;
+		__entry->level = level;
+		__entry->nlevels = nlevels;
+		__entry->ptr = ptr;
+	),
+	TP_printk("dev %d:%d agno %u agbno %u btnum %d level %d nlevels %d ptr %d\n",
+		  MAJOR(__entry->dev), MINOR(__entry->dev),
+		  __entry->agno,
+		  __entry->bno,
+		  __entry->btnum,
+		  __entry->level,
+		  __entry->nlevels,
+		  __entry->ptr)
+)
+#define DEFINE_SCRUB_SBTREE_EVENT(name) \
+DEFINE_EVENT(xfs_scrub_sbtree_class, name, \
+	TP_PROTO(struct xfs_mount *mp, xfs_agnumber_t agno, xfs_agblock_t bno, \
+		 xfs_btnum_t btnum, int level, int nlevels, int ptr), \
+	TP_ARGS(mp, agno, bno, btnum, level, nlevels, ptr))
+DEFINE_SCRUB_SBTREE_EVENT(xfs_btree_scrub_rec);
+DEFINE_SCRUB_SBTREE_EVENT(xfs_btree_scrub_key);
+
 #endif /* _TRACE_XFS_H */
 
 #undef TRACE_INCLUDE_PATH

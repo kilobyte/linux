@@ -34,6 +34,7 @@
 #include "xfs_rmap_btree.h"
 #include "xfs_log_format.h"
 #include "xfs_trans.h"
+#include "xfs_trace.h"
 #include "xfs_scrub.h"
 
 static const char * const btree_types[] = {
@@ -88,6 +89,12 @@ xfs_btree_scrub_rec(
 	struct xfs_btree_block	*block;
 	struct xfs_btree_block	*keyblock;
 
+	trace_xfs_btree_scrub_rec(cur->bc_mp, cur->bc_private.a.agno,
+			XFS_FSB_TO_AGBNO(cur->bc_mp,
+				XFS_DADDR_TO_FSB(cur->bc_mp,
+					cur->bc_bufs[0]->b_bn)),
+			cur->bc_btnum, 0, cur->bc_nlevels, cur->bc_ptrs[0]);
+
 	block = XFS_BUF_TO_BLOCK(cur->bc_bufs[0]);
 	rec = xfs_btree_rec_addr(cur, cur->bc_ptrs[0], block);
 
@@ -134,6 +141,13 @@ xfs_btree_scrub_key(
 	union xfs_btree_key	*keyp;
 	struct xfs_btree_block	*block;
 	struct xfs_btree_block	*keyblock;
+
+	trace_xfs_btree_scrub_key(cur->bc_mp, cur->bc_private.a.agno,
+			XFS_FSB_TO_AGBNO(cur->bc_mp,
+				XFS_DADDR_TO_FSB(cur->bc_mp,
+					cur->bc_bufs[level]->b_bn)),
+			cur->bc_btnum, level, cur->bc_nlevels,
+			cur->bc_ptrs[level]);
 
 	block = XFS_BUF_TO_BLOCK(cur->bc_bufs[level]);
 	key = xfs_btree_key_addr(cur, cur->bc_ptrs[level], block);
