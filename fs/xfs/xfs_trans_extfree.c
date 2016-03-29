@@ -125,7 +125,8 @@ xfs_trans_free_extent(
 	struct xfs_extent	*extp;
 	int			error;
 
-	error = xfs_free_extent(tp, start_block, ext_len, oinfo);
+	error = xfs_free_extent(tp, start_block, ext_len, oinfo,
+			XFS_AG_RESV_NONE);
 
 	/*
 	 * Mark the transaction dirty, even on error. This ensures the

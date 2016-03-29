@@ -37,6 +37,7 @@
 #include "xfs_trans.h"
 #include "xfs_buf_item.h"
 #include "xfs_log.h"
+#include "xfs_ag_resv.h"
 
 struct workqueue_struct *xfs_alloc_wq;
 
@@ -682,12 +683,29 @@ xfs_alloc_ag_vextent(
 	xfs_alloc_arg_t	*args)	/* argument structure for allocation */
 {
 	int		error=0;
+	xfs_extlen_t	reservation;
+	xfs_extlen_t	oldmax;
 
 	ASSERT(args->minlen > 0);
 	ASSERT(args->maxlen > 0);
 	ASSERT(args->minlen <= args->maxlen);
 	ASSERT(args->mod < args->prod);
 	ASSERT(args->alignment > 0);
+
+	/*
+	 * Clamp maxlen to the amount of free space minus any reservations
+	 * that have been made.
+	 */
+	oldmax = args->maxlen;
+	reservation = xfs_ag_resv_needed(args->pag, args->resv);
+	if (args->maxlen > args->pag->pagf_freeblks - reservation)
+		args->maxlen = args->pag->pagf_freeblks - reservation;
+	if (args->maxlen == 0) {
+		args->agbno = NULLAGBLOCK;
+		args->maxlen = oldmax;
+		return 0;
+	}
+
 	/*
 	 * Branch to correct routine based on the type.
 	 */
@@ -707,12 +725,14 @@ xfs_alloc_ag_vextent(
 		/* NOTREACHED */
 	}
 
+	args->maxlen = oldmax;
+
 	if (error || args->agbno == NULLAGBLOCK)
 		return error;
 
 	ASSERT(args->len >= args->minlen);
 	ASSERT(args->len <= args->maxlen);
-	ASSERT(!args->wasfromfl || !args->isfl);
+	ASSERT(!args->wasfromfl || args->resv != XFS_AG_RESV_AGFL);
 	ASSERT(args->agbno % args->alignment == 0);
 
 	/* if not file data, insert new block into the reverse map btree */
@@ -734,12 +754,7 @@ xfs_alloc_ag_vextent(
 					      args->agbno, args->len));
 	}
 
-	if (!args->isfl) {
-		xfs_trans_mod_sb(args->tp, args->wasdel ?
-				 XFS_TRANS_SB_RES_FDBLOCKS :
-				 XFS_TRANS_SB_FDBLOCKS,
-				 -((long)(args->len)));
-	}
+	xfs_ag_resv_alloc_extent(args->pag, args->resv, args);
 
 	XFS_STATS_INC(args->mp, xs_allocx);
 	XFS_STATS_ADD(args->mp, xs_allocb, args->len);
@@ -1601,7 +1616,8 @@ xfs_alloc_ag_vextent_small(
 	 * to respect minleft even when pulling from the
 	 * freelist.
 	 */
-	else if (args->minlen == 1 && args->alignment == 1 && !args->isfl &&
+	else if (args->minlen == 1 && args->alignment == 1 &&
+		 args->resv != XFS_AG_RESV_AGFL &&
 		 (be32_to_cpu(XFS_BUF_TO_AGF(args->agbp)->agf_flcount)
 		  > args->minleft)) {
 		error = xfs_alloc_get_freelist(args->tp, args->agbp, &fbno, 0);
@@ -1672,7 +1688,7 @@ xfs_free_ag_extent(
 	xfs_agblock_t	bno,	/* starting block number */
 	xfs_extlen_t	len,	/* length of extent */
 	struct xfs_owner_info	*oinfo,	/* extent owner */
-	int		isfl)	/* set if is freelist blocks - no sb acctg */
+	enum xfs_ag_resv_type	type) /* extent reservation type */
 {
 	xfs_btree_cur_t	*bno_cur;	/* cursor for by-block btree */
 	xfs_btree_cur_t	*cnt_cur;	/* cursor for by-size btree */
@@ -1900,21 +1916,22 @@ xfs_free_ag_extent(
 	 */
 	pag = xfs_perag_get(mp, agno);
 	error = xfs_alloc_update_counters(tp, pag, agbp, len);
+	xfs_ag_resv_free_extent(pag, type, tp, len);
 	xfs_perag_put(pag);
 	if (error)
 		goto error0;
 
-	if (!isfl)
-		xfs_trans_mod_sb(tp, XFS_TRANS_SB_FDBLOCKS, (long)len);
 	XFS_STATS_INC(mp, xs_freex);
 	XFS_STATS_ADD(mp, xs_freeb, len);
 
-	trace_xfs_free_extent(mp, agno, bno, len, isfl, haveleft, haveright);
+	trace_xfs_free_extent(mp, agno, bno, len, type == XFS_AG_RESV_AGFL,
+			haveleft, haveright);
 
 	return 0;
 
  error0:
-	trace_xfs_free_extent(mp, agno, bno, len, isfl, -1, -1);
+	trace_xfs_free_extent(mp, agno, bno, len, type == XFS_AG_RESV_AGFL,
+			-1, -1);
 	if (bno_cur)
 		xfs_btree_del_cursor(bno_cur, XFS_BTREE_ERROR);
 	if (cnt_cur)
@@ -1939,21 +1956,43 @@ xfs_alloc_compute_maxlevels(
 }
 
 /*
- * Find the length of the longest extent in an AG.
+ * Find the length of the longest extent in an AG.  The 'need' parameter
+ * specifies how much space we're going to need for the AGFL and the
+ * 'reserved' parameter tells us how many blocks in this AG are reserved for
+ * other callers.
  */
 xfs_extlen_t
 xfs_alloc_longest_free_extent(
 	struct xfs_mount	*mp,
 	struct xfs_perag	*pag,
-	xfs_extlen_t		need)
+	xfs_extlen_t		need,
+	xfs_extlen_t		reserved)
 {
 	xfs_extlen_t		delta = 0;
 
+	/*
+	 * If the AGFL needs a recharge, we'll have to subtract that from the
+	 * longest extent.
+	 */
 	if (need > pag->pagf_flcount)
 		delta = need - pag->pagf_flcount;
 
+	/*
+	 * If we cannot maintain others' reservations with space from the
+	 * not-longest freesp extents, we'll have to subtract /that/ from
+	 * the longest extent too.
+	 */
+	if (pag->pagf_freeblks - pag->pagf_longest < reserved)
+		delta += reserved - (pag->pagf_freeblks - pag->pagf_longest);
+
+	/*
+	 * If the longest extent is long enough to satisfy all the
+	 * reservations and AGFL rules in place, we can return this extent.
+	 */
 	if (pag->pagf_longest > delta)
 		return pag->pagf_longest - delta;
+
+	/* Otherwise, let the caller try for 1 block if there's space. */
 	return pag->pagf_flcount > 0 || pag->pagf_longest > 0;
 }
 
@@ -1993,20 +2032,24 @@ xfs_alloc_space_available(
 {
 	struct xfs_perag	*pag = args->pag;
 	xfs_extlen_t		longest;
+	xfs_extlen_t		reservation; /* blocks that are still reserved */
 	int			available;
 
 	if (flags & XFS_ALLOC_FLAG_FREEING)
 		return true;
 
+	reservation = xfs_ag_resv_needed(pag, args->resv);
+
 	/* do we have enough contiguous free space for the allocation? */
-	longest = xfs_alloc_longest_free_extent(args->mp, pag, min_free);
+	longest = xfs_alloc_longest_free_extent(args->mp, pag, min_free,
+			reservation);
 	if ((args->minlen + args->alignment + args->minalignslop - 1) > longest)
 		return false;
 
-	/* do have enough free space remaining for the allocation? */
+	/* do we have enough free space remaining for the allocation? */
 	available = (int)(pag->pagf_freeblks + pag->pagf_flcount -
-			  min_free - args->total);
-	if (available < (int)args->minleft)
+			  reservation - min_free - args->total);
+	if (available < (int)args->minleft || available <= 0)
 		return false;
 
 	return true;
@@ -2112,7 +2155,8 @@ xfs_alloc_fix_freelist(
 			if (error)
 				goto out_agbp_relse;
 			error = xfs_free_ag_extent(tp, agbp, args->agno, bno, 1,
-						   &targs.oinfo, 1);
+						   &targs.oinfo,
+						   XFS_AG_RESV_AGFL);
 			if (error)
 				goto out_agbp_relse;
 			bp = xfs_btree_get_bufs(mp, tp, args->agno, bno, 0);
@@ -2126,7 +2170,7 @@ xfs_alloc_fix_freelist(
 		xfs_rmap_ag_owner(&targs.oinfo, XFS_RMAP_OWN_AG);
 	targs.agbp = agbp;
 	targs.agno = args->agno;
-	targs.alignment = targs.minlen = targs.prod = targs.isfl = 1;
+	targs.alignment = targs.minlen = targs.prod = 1;
 	targs.type = XFS_ALLOCTYPE_THIS_AG;
 	targs.pag = pag;
 	error = xfs_alloc_read_agfl(mp, tp, targs.agno, &agflbp);
@@ -2137,6 +2181,7 @@ xfs_alloc_fix_freelist(
 	while (pag->pagf_flcount < need) {
 		targs.agbno = 0;
 		targs.maxlen = need - pag->pagf_flcount;
+		targs.resv = XFS_AG_RESV_AGFL;
 
 		/* Allocate as many blocks as possible at once. */
 		error = xfs_alloc_ag_vextent(&targs);
@@ -2815,7 +2860,8 @@ xfs_free_extent(
 	struct xfs_trans	*tp,	/* transaction pointer */
 	xfs_fsblock_t		bno,	/* starting block number of extent */
 	xfs_extlen_t		len,	/* length of extent */
-	struct xfs_owner_info	*oinfo)	/* extent owner */
+	struct xfs_owner_info	*oinfo,	/* extent owner */
+	enum xfs_ag_resv_type	type)	/* block reservation type */
 {
 	struct xfs_mount	*mp = tp->t_mountp;
 	struct xfs_buf		*agbp;
@@ -2824,6 +2870,7 @@ xfs_free_extent(
 	int			error;
 
 	ASSERT(len != 0);
+	ASSERT(type != XFS_AG_RESV_AGFL);
 
 	trace_xfs_bmap_free_deferred(mp, agno, 0, agbno, len);
 
@@ -2843,7 +2890,7 @@ xfs_free_extent(
 			agbno + len <= be32_to_cpu(XFS_BUF_TO_AGF(agbp)->agf_length),
 			err);
 
-	error = xfs_free_ag_extent(tp, agbp, agno, agbno, len, oinfo, 0);
+	error = xfs_free_ag_extent(tp, agbp, agno, agbno, len, oinfo, type);
 	if (error)
 		goto err;
 

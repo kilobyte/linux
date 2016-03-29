@@ -1569,14 +1569,15 @@ TRACE_EVENT(xfs_agf,
 
 TRACE_EVENT(xfs_free_extent,
 	TP_PROTO(struct xfs_mount *mp, xfs_agnumber_t agno, xfs_agblock_t agbno,
-		 xfs_extlen_t len, bool isfl, int haveleft, int haveright),
-	TP_ARGS(mp, agno, agbno, len, isfl, haveleft, haveright),
+		 xfs_extlen_t len, enum xfs_ag_resv_type resv, int haveleft,
+		 int haveright),
+	TP_ARGS(mp, agno, agbno, len, resv, haveleft, haveright),
 	TP_STRUCT__entry(
 		__field(dev_t, dev)
 		__field(xfs_agnumber_t, agno)
 		__field(xfs_agblock_t, agbno)
 		__field(xfs_extlen_t, len)
-		__field(int, isfl)
+		__field(int, resv)
 		__field(int, haveleft)
 		__field(int, haveright)
 	),
@@ -1585,16 +1586,16 @@ TRACE_EVENT(xfs_free_extent,
 		__entry->agno = agno;
 		__entry->agbno = agbno;
 		__entry->len = len;
-		__entry->isfl = isfl;
+		__entry->resv = resv;
 		__entry->haveleft = haveleft;
 		__entry->haveright = haveright;
 	),
-	TP_printk("dev %d:%d agno %u agbno %u len %u isfl %d %s",
+	TP_printk("dev %d:%d agno %u agbno %u len %u resv %d %s",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  __entry->agno,
 		  __entry->agbno,
 		  __entry->len,
-		  __entry->isfl,
+		  __entry->resv,
 		  __entry->haveleft ?
 			(__entry->haveright ? "both" : "left") :
 			(__entry->haveright ? "right" : "none"))
@@ -1621,7 +1622,7 @@ DECLARE_EVENT_CLASS(xfs_alloc_class,
 		__field(short, otype)
 		__field(char, wasdel)
 		__field(char, wasfromfl)
-		__field(char, isfl)
+		__field(int, resv)
 		__field(char, userdata)
 		__field(xfs_fsblock_t, firstblock)
 	),
@@ -1642,13 +1643,13 @@ DECLARE_EVENT_CLASS(xfs_alloc_class,
 		__entry->otype = args->otype;
 		__entry->wasdel = args->wasdel;
 		__entry->wasfromfl = args->wasfromfl;
-		__entry->isfl = args->isfl;
+		__entry->resv = args->resv;
 		__entry->userdata = args->userdata;
 		__entry->firstblock = args->firstblock;
 	),
 	TP_printk("dev %d:%d agno %u agbno %u minlen %u maxlen %u mod %u "
 		  "prod %u minleft %u total %u alignment %u minalignslop %u "
-		  "len %u type %s otype %s wasdel %d wasfromfl %d isfl %d "
+		  "len %u type %s otype %s wasdel %d wasfromfl %d resv %d "
 		  "userdata %d firstblock 0x%llx",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  __entry->agno,
@@ -1666,7 +1667,7 @@ DECLARE_EVENT_CLASS(xfs_alloc_class,
 		  __print_symbolic(__entry->otype, XFS_ALLOC_TYPES),
 		  __entry->wasdel,
 		  __entry->wasfromfl,
-		  __entry->isfl,
+		  __entry->resv,
 		  __entry->userdata,
 		  (unsigned long long)__entry->firstblock)
 )
@@ -2557,21 +2558,6 @@ DEFINE_RMAPBT_EVENT(xfs_rmap_lookup_le_range_result);
 DEFINE_RMAPBT_EVENT(xfs_rmap_map_gtrec);
 DEFINE_RMAPBT_EVENT(xfs_rmap_convert_gtrec);
 DEFINE_RMAPBT_EVENT(xfs_rmap_find_left_neighbor_result);
-
-/* dummy definitions to avoid breaking bisectability; will be removed later */
-#ifndef XFS_AG_RESV_DUMMY
-#define XFS_AG_RESV_DUMMY
-enum xfs_ag_resv_type {
-	XFS_AG_RESV_NONE = 0,
-	XFS_AG_RESV_METADATA,
-	XFS_AG_RESV_AGFL,
-};
-struct xfs_ag_resv {
-	xfs_extlen_t	ar_reserved;
-	xfs_extlen_t	ar_asked;
-};
-#define xfs_perag_resv(...)	NULL
-#endif
 
 /* per-AG reservation */
 DECLARE_EVENT_CLASS(xfs_ag_resv_class,
