@@ -475,6 +475,9 @@ void
 xfs_rmapbt_compute_maxlevels(
 	struct xfs_mount		*mp)
 {
-	mp->m_rmap_maxlevels = xfs_btree_compute_maxlevels(mp,
-			mp->m_rmap_mnr, mp->m_sb.sb_agblocks);
+	if (xfs_sb_version_hasreflink(&mp->m_sb))
+		mp->m_rmap_maxlevels = XFS_BTREE_MAXLEVELS;
+	else
+		mp->m_rmap_maxlevels = xfs_btree_compute_maxlevels(mp,
+				mp->m_rmap_mnr, mp->m_sb.sb_agblocks);
 }
