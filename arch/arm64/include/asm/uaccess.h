@@ -48,15 +48,6 @@
  * on our cache or tlb entries.
  */
 
-struct exception_table_entry
-{
-	int insn, fixup;
-};
-
-#define ARCH_HAS_RELATIVE_EXTABLE
-
-extern int fixup_exception(struct pt_regs *regs);
-
 #define KERNEL_DS	(-1UL)
 #define get_ds()	(KERNEL_DS)
 
@@ -103,12 +94,6 @@ static inline void set_fs(mm_segment_t fs)
 
 #define access_ok(type, addr, size)	__range_ok(addr, size)
 #define user_addr_max			get_fs
-
-#define _ASM_EXTABLE(from, to)						\
-	"	.pushsection	__ex_table, \"a\"\n"			\
-	"	.align		3\n"					\
-	"	.long		(" #from " - .), (" #to " - .)\n"	\
-	"	.popsection\n"
 
 /*
  * The "__xxx" versions of the user access functions do not verify the address

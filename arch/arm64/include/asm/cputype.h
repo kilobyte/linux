@@ -92,12 +92,25 @@
 #ifndef __ASSEMBLY__
 
 #include <asm/sysreg.h>
+#include <asm/exttable.h>
 
-#define read_cpuid(reg) ({						\
+#define __read_cpuid(reg, err) ({					\
 	u64 __val;							\
-	asm("mrs_s	%0, " __stringify(SYS_ ## reg) : "=r" (__val));	\
+	asm (								\
+	"1:mrs_s	%0, " reg "\n"					\
+	"2:\n"								\
+	"	.section .fixup, \"ax\"\n"				\
+	"	.align	2\n"						\
+	"3:	mov	%w0, %1\n"					\
+	"	b	2b\n"						\
+	"	.previous\n"						\
+	_ASM_EXTABLE(1b, 3b)						\
+	: "=r" (__val)							\
+	: "i" (err));							\
 	__val;								\
 })
+
+#define read_cpuid(reg) __read_cpuid(__stringify(SYS_ ## reg), 0)
 
 /*
  * The CPU ID never changes at run time, so we might as well tell the
