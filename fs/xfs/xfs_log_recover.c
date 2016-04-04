@@ -4786,6 +4786,9 @@ xlog_recover_process_rui(
 		case XFS_RMAP_EXTENT_CONVERT:
 			type = XFS_RMAP_CONVERT;
 			break;
+		case XFS_RMAP_EXTENT_CONVERT_SHARED:
+			type = XFS_RMAP_CONVERT_SHARED;
+			break;
 		case XFS_RMAP_EXTENT_ALLOC:
 			type = XFS_RMAP_ALLOC;
 			break;
