@@ -63,6 +63,72 @@ xfs_prealloc_blocks(
 }
 
 /*
+ * In order to avoid ENOSPC-related deadlock caused by out-of-order locking of
+ * AGF buffer (PV 947395), we place constraints on the relationship among
+ * actual allocations for data blocks, freelist blocks, and potential file data
+ * bmap btree blocks. However, these restrictions may result in no actual space
+ * allocated for a delayed extent, for example, a data block in a certain AG is
+ * allocated but there is no additional block for the additional bmap btree
+ * block due to a split of the bmap btree of the file. The result of this may
+ * lead to an infinite loop when the file gets flushed to disk and all delayed
+ * extents need to be actually allocated. To get around this, we explicitly set
+ * aside a few blocks which will not be reserved in delayed allocation.
+ *
+ * The minimum number of needed freelist blocks is 4 fsbs _per AG_ when we are
+ * not using rmap btrees a potential split of file's bmap btree requires 1 fsb,
+ * so we set the number of set-aside blocks to 4 + 4*agcount when not using
+ * rmap btrees.
+ *
+ * When rmap btrees are active, we have to consider that using the last block
+ * in the AG can cause a full height rmap btree split and we need enough blocks
+ * on the AGFL to be able to handle this. That means we have, in addition to
+ * the above consideration, another (2 * mp->m_rmap_levels) - 1 blocks required
+ * to be available to the free list.
+ */
+unsigned int
+xfs_alloc_set_aside(
+	struct xfs_mount *mp)
+{
+	unsigned int	blocks;
+
+	blocks = 4 + (mp->m_sb.sb_agcount * XFS_ALLOC_AGFL_RESERVE);
+	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
+		return blocks;
+	return blocks + (mp->m_sb.sb_agcount * (2 * mp->m_rmap_maxlevels) - 1);
+}
+
+/*
+ * When deciding how much space to allocate out of an AG, we limit the
+ * allocation maximum size to the size the AG. However, we cannot use all the
+ * blocks in the AG - some are permanently used by metadata. These
+ * blocks are generally:
+ *	- the AG superblock, AGF, AGI and AGFL
+ *	- the AGF (bno and cnt) and AGI btree root blocks, and optionally
+ *	  the AGI free inode and rmap btree root blocks.
+ *	- blocks on the AGFL according to xfs_alloc_set_aside() limits
+ *
+ * The AG headers are sector sized, so the amount of space they take up is
+ * dependent on filesystem geometry. The others are all single blocks.
+ */
+unsigned int
+xfs_alloc_ag_max_usable(struct xfs_mount *mp)
+{
+	unsigned int	blocks;
+
+	blocks = XFS_BB_TO_FSB(mp, XFS_FSS_TO_BB(mp, 4)); /* ag headers */
+	blocks += XFS_ALLOC_AGFL_RESERVE;
+	blocks += 3;			/* AGF, AGI btree root blocks */
+	if (xfs_sb_version_hasfinobt(&mp->m_sb))
+		blocks++;		/* finobt root block */
+	if (xfs_sb_version_hasrmapbt(&mp->m_sb)) {
+		/* rmap root block + full tree split on full AG */
+		blocks += 1 + (2 * mp->m_ag_maxlevels) - 1;
+	}
+
+	return mp->m_sb.sb_agblocks - blocks;
+}
+
+/*
  * Lookup the record equal to [bno, len] in the btree given by cur.
  */
 STATIC int				/* error */
@@ -1904,6 +1970,11 @@ xfs_alloc_min_freelist(
 	/* space needed by-size freespace btree */
 	min_free += min_t(unsigned int, pag->pagf_levels[XFS_BTNUM_CNTi] + 1,
 				       mp->m_ag_maxlevels);
+	/* space needed reverse mapping used space btree */
+	if (xfs_sb_version_hasrmapbt(&mp->m_sb))
+		min_free += min_t(unsigned int,
+				  pag->pagf_levels[XFS_BTNUM_RMAPi] + 1,
+				  mp->m_rmap_maxlevels);
 
 	return min_free;
 }
