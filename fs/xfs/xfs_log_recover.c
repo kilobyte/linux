@@ -44,6 +44,7 @@
 #include "xfs_bmap_btree.h"
 #include "xfs_error.h"
 #include "xfs_dir2.h"
+#include "xfs_rmap_item.h"
 
 #define BLK_AVG(blk1, blk2)	((blk1+blk2) >> 1)
 
@@ -1912,6 +1913,8 @@ xlog_recover_reorder_trans(
 		case XFS_LI_QUOTAOFF:
 		case XFS_LI_EFD:
 		case XFS_LI_EFI:
+		case XFS_LI_RUI:
+		case XFS_LI_RUD:
 			trace_xfs_log_recover_item_reorder_tail(log,
 							trans, item, pass);
 			list_move_tail(&item->ri_list, &inode_list);
@@ -3416,6 +3419,101 @@ xlog_recover_efd_pass2(
 }
 
 /*
+ * This routine is called to create an in-core extent rmap update
+ * item from the rui format structure which was logged on disk.
+ * It allocates an in-core rui, copies the extents from the format
+ * structure into it, and adds the rui to the AIL with the given
+ * LSN.
+ */
+STATIC int
+xlog_recover_rui_pass2(
+	struct xlog			*log,
+	struct xlog_recover_item	*item,
+	xfs_lsn_t			lsn)
+{
+	int				error;
+	struct xfs_mount		*mp = log->l_mp;
+	struct xfs_rui_log_item		*ruip;
+	struct xfs_rui_log_format	*rui_formatp;
+
+	rui_formatp = item->ri_buf[0].i_addr;
+
+	ruip = xfs_rui_init(mp, rui_formatp->rui_nextents);
+	error = xfs_rui_copy_format(&item->ri_buf[0], &ruip->rui_format);
+	if (error) {
+		xfs_rui_item_free(ruip);
+		return error;
+	}
+	atomic_set(&ruip->rui_next_extent, rui_formatp->rui_nextents);
+
+	spin_lock(&log->l_ailp->xa_lock);
+	/*
+	 * The RUI has two references. One for the RUD and one for RUI to ensure
+	 * it makes it into the AIL. Insert the RUI into the AIL directly and
+	 * drop the RUI reference. Note that xfs_trans_ail_update() drops the
+	 * AIL lock.
+	 */
+	xfs_trans_ail_update(log->l_ailp, &ruip->rui_item, lsn);
+	xfs_rui_release(ruip);
+	return 0;
+}
+
+
+/*
+ * This routine is called when an RUD format structure is found in a committed
+ * transaction in the log. Its purpose is to cancel the corresponding RUI if it
+ * was still in the log. To do this it searches the AIL for the RUI with an id
+ * equal to that in the RUD format structure. If we find it we drop the RUD
+ * reference, which removes the RUI from the AIL and frees it.
+ */
+STATIC int
+xlog_recover_rud_pass2(
+	struct xlog			*log,
+	struct xlog_recover_item	*item)
+{
+	struct xfs_rud_log_format	*rud_formatp;
+	struct xfs_rui_log_item		*ruip = NULL;
+	struct xfs_log_item		*lip;
+	__uint64_t			rui_id;
+	struct xfs_ail_cursor		cur;
+	struct xfs_ail			*ailp = log->l_ailp;
+
+	rud_formatp = item->ri_buf[0].i_addr;
+	ASSERT(item->ri_buf[0].i_len == (sizeof(struct xfs_rud_log_format) +
+			((rud_formatp->rud_nextents - 1) *
+			sizeof(struct xfs_map_extent))));
+	rui_id = rud_formatp->rud_rui_id;
+
+	/*
+	 * Search for the RUI with the id in the RUD format structure in the
+	 * AIL.
+	 */
+	spin_lock(&ailp->xa_lock);
+	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
+	while (lip != NULL) {
+		if (lip->li_type == XFS_LI_RUI) {
+			ruip = (struct xfs_rui_log_item *)lip;
+			if (ruip->rui_format.rui_id == rui_id) {
+				/*
+				 * Drop the RUD reference to the RUI. This
+				 * removes the RUI from the AIL and frees it.
+				 */
+				spin_unlock(&ailp->xa_lock);
+				xfs_rui_release(ruip);
+				spin_lock(&ailp->xa_lock);
+				break;
+			}
+		}
+		lip = xfs_trans_ail_cursor_next(ailp, &cur);
+	}
+
+	xfs_trans_ail_cursor_done(&cur);
+	spin_unlock(&ailp->xa_lock);
+
+	return 0;
+}
+
+/*
  * This routine is called when an inode create format structure is found in a
  * committed transaction in the log.  It's purpose is to initialise the inodes
  * being allocated on disk. This requires us to get inode cluster buffers that
@@ -3640,6 +3738,8 @@ xlog_recover_ra_pass2(
 	case XFS_LI_EFI:
 	case XFS_LI_EFD:
 	case XFS_LI_QUOTAOFF:
+	case XFS_LI_RUI:
+	case XFS_LI_RUD:
 	default:
 		break;
 	}
@@ -3663,6 +3763,8 @@ xlog_recover_commit_pass1(
 	case XFS_LI_EFD:
 	case XFS_LI_DQUOT:
 	case XFS_LI_ICREATE:
+	case XFS_LI_RUI:
+	case XFS_LI_RUD:
 		/* nothing to do in pass 1 */
 		return 0;
 	default:
@@ -3693,6 +3795,10 @@ xlog_recover_commit_pass2(
 		return xlog_recover_efi_pass2(log, item, trans->r_lsn);
 	case XFS_LI_EFD:
 		return xlog_recover_efd_pass2(log, item);
+	case XFS_LI_RUI:
+		return xlog_recover_rui_pass2(log, item, trans->r_lsn);
+	case XFS_LI_RUD:
+		return xlog_recover_rud_pass2(log, item);
 	case XFS_LI_DQUOT:
 		return xlog_recover_dquot_pass2(log, buffer_list, item,
 						trans->r_lsn);
@@ -4165,6 +4271,18 @@ xlog_recover_process_data(
 	return 0;
 }
 
+/* Is this log item a deferred action intent? */
+static inline bool xlog_item_is_intent(struct xfs_log_item *lip)
+{
+	switch (lip->li_type) {
+	case XFS_LI_EFI:
+	case XFS_LI_RUI:
+		return true;
+	default:
+		return false;
+	}
+}
+
 /*
  * Process an extent free intent item that was recovered from
  * the log.  We need to free the extents that it describes.
@@ -4265,15 +4383,21 @@ xlog_recover_process_efis(
 	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
 	while (lip != NULL) {
 		/*
-		 * We're done when we see something other than an EFI.
-		 * There should be no EFIs left in the AIL now.
+		 * We're done when we see something other than an intent.
+		 * There should be no intents left in the AIL now.
 		 */
-		if (lip->li_type != XFS_LI_EFI) {
+		if (!xlog_item_is_intent(lip)) {
 #ifdef DEBUG
 			for (; lip; lip = xfs_trans_ail_cursor_next(ailp, &cur))
-				ASSERT(lip->li_type != XFS_LI_EFI);
+				ASSERT(!xlog_item_is_intent(lip));
 #endif
 			break;
+		}
+
+		/* Skip anything that isn't an EFI */
+		if (lip->li_type != XFS_LI_EFI) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
 		}
 
 		/*
@@ -4320,18 +4444,208 @@ xlog_recover_cancel_efis(
 		 * We're done when we see something other than an EFI.
 		 * There should be no EFIs left in the AIL now.
 		 */
-		if (lip->li_type != XFS_LI_EFI) {
+		if (!xlog_item_is_intent(lip)) {
 #ifdef DEBUG
 			for (; lip; lip = xfs_trans_ail_cursor_next(ailp, &cur))
-				ASSERT(lip->li_type != XFS_LI_EFI);
+				ASSERT(!xlog_item_is_intent(lip));
 #endif
 			break;
+		}
+
+		/* Skip anything that isn't an EFI */
+		if (lip->li_type != XFS_LI_EFI) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
 		}
 
 		efip = container_of(lip, struct xfs_efi_log_item, efi_item);
 
 		spin_unlock(&ailp->xa_lock);
 		xfs_efi_release(efip);
+		spin_lock(&ailp->xa_lock);
+
+		lip = xfs_trans_ail_cursor_next(ailp, &cur);
+	}
+
+	xfs_trans_ail_cursor_done(&cur);
+	spin_unlock(&ailp->xa_lock);
+	return error;
+}
+
+/*
+ * Process an rmap update intent item that was recovered from the log.
+ * We need to update the rmapbt.
+ */
+STATIC int
+xlog_recover_process_rui(
+	struct xfs_mount		*mp,
+	struct xfs_rui_log_item		*ruip)
+{
+	int				i;
+	int				error = 0;
+	struct xfs_map_extent		*rmap;
+	xfs_fsblock_t			startblock_fsb;
+	bool				op_ok;
+
+	ASSERT(!test_bit(XFS_RUI_RECOVERED, &ruip->rui_flags));
+
+	/*
+	 * First check the validity of the extents described by the
+	 * RUI.  If any are bad, then assume that all are bad and
+	 * just toss the RUI.
+	 */
+	for (i = 0; i < ruip->rui_format.rui_nextents; i++) {
+		rmap = &(ruip->rui_format.rui_extents[i]);
+		startblock_fsb = XFS_BB_TO_FSB(mp,
+				   XFS_FSB_TO_DADDR(mp, rmap->me_startblock));
+		switch (rmap->me_flags & XFS_RMAP_EXTENT_TYPE_MASK) {
+		case XFS_RMAP_EXTENT_MAP:
+		case XFS_RMAP_EXTENT_MAP_SHARED:
+		case XFS_RMAP_EXTENT_UNMAP:
+		case XFS_RMAP_EXTENT_UNMAP_SHARED:
+		case XFS_RMAP_EXTENT_CONVERT:
+		case XFS_RMAP_EXTENT_CONVERT_SHARED:
+		case XFS_RMAP_EXTENT_ALLOC:
+		case XFS_RMAP_EXTENT_FREE:
+			op_ok = true;
+			break;
+		default:
+			op_ok = false;
+			break;
+		}
+		if (!op_ok || (startblock_fsb == 0) ||
+		    (rmap->me_len == 0) ||
+		    (startblock_fsb >= mp->m_sb.sb_dblocks) ||
+		    (rmap->me_len >= mp->m_sb.sb_agblocks) ||
+		    (rmap->me_flags & ~XFS_RMAP_EXTENT_FLAGS)) {
+			/*
+			 * This will pull the RUI from the AIL and
+			 * free the memory associated with it.
+			 */
+			set_bit(XFS_RUI_RECOVERED, &ruip->rui_flags);
+			xfs_rui_release(ruip);
+			return -EIO;
+		}
+	}
+
+	/* XXX: do nothing for now */
+	set_bit(XFS_RUI_RECOVERED, &ruip->rui_flags);
+	xfs_rui_release(ruip);
+	return error;
+}
+
+/*
+ * When this is called, all of the RUIs which did not have
+ * corresponding RUDs should be in the AIL.  What we do now
+ * is update the rmaps associated with each one.
+ *
+ * Since we process the RUIs in normal transactions, they
+ * will be removed at some point after the commit.  This prevents
+ * us from just walking down the list processing each one.
+ * We'll use a flag in the RUI to skip those that we've already
+ * processed and use the AIL iteration mechanism's generation
+ * count to try to speed this up at least a bit.
+ *
+ * When we start, we know that the RUIs are the only things in
+ * the AIL.  As we process them, however, other items are added
+ * to the AIL.  Since everything added to the AIL must come after
+ * everything already in the AIL, we stop processing as soon as
+ * we see something other than an RUI in the AIL.
+ */
+STATIC int
+xlog_recover_process_ruis(
+	struct xlog		*log)
+{
+	struct xfs_log_item	*lip;
+	struct xfs_rui_log_item	*ruip;
+	int			error = 0;
+	struct xfs_ail_cursor	cur;
+	struct xfs_ail		*ailp;
+
+	ailp = log->l_ailp;
+	spin_lock(&ailp->xa_lock);
+	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
+	while (lip != NULL) {
+		/*
+		 * We're done when we see something other than an intent.
+		 * There should be no intents left in the AIL now.
+		 */
+		if (!xlog_item_is_intent(lip)) {
+#ifdef DEBUG
+			for (; lip; lip = xfs_trans_ail_cursor_next(ailp, &cur))
+				ASSERT(!xlog_item_is_intent(lip));
+#endif
+			break;
+		}
+
+		/* Skip anything that isn't an RUI */
+		if (lip->li_type != XFS_LI_RUI) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
+		}
+
+		/*
+		 * Skip RUIs that we've already processed.
+		 */
+		ruip = container_of(lip, struct xfs_rui_log_item, rui_item);
+		if (test_bit(XFS_RUI_RECOVERED, &ruip->rui_flags)) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
+		}
+
+		spin_unlock(&ailp->xa_lock);
+		error = xlog_recover_process_rui(log->l_mp, ruip);
+		spin_lock(&ailp->xa_lock);
+		if (error)
+			goto out;
+		lip = xfs_trans_ail_cursor_next(ailp, &cur);
+	}
+out:
+	xfs_trans_ail_cursor_done(&cur);
+	spin_unlock(&ailp->xa_lock);
+	return error;
+}
+
+/*
+ * A cancel occurs when the mount has failed and we're bailing out. Release all
+ * pending RUIs so they don't pin the AIL.
+ */
+STATIC int
+xlog_recover_cancel_ruis(
+	struct xlog		*log)
+{
+	struct xfs_log_item	*lip;
+	struct xfs_rui_log_item	*ruip;
+	int			error = 0;
+	struct xfs_ail_cursor	cur;
+	struct xfs_ail		*ailp;
+
+	ailp = log->l_ailp;
+	spin_lock(&ailp->xa_lock);
+	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
+	while (lip != NULL) {
+		/*
+		 * We're done when we see something other than an RUI.
+		 * There should be no RUIs left in the AIL now.
+		 */
+		if (!xlog_item_is_intent(lip)) {
+#ifdef DEBUG
+			for (; lip; lip = xfs_trans_ail_cursor_next(ailp, &cur))
+				ASSERT(!xlog_item_is_intent(lip));
+#endif
+			break;
+		}
+
+		/* Skip anything that isn't an RUI */
+		if (lip->li_type != XFS_LI_RUI) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
+		}
+
+		ruip = container_of(lip, struct xfs_rui_log_item, rui_item);
+
+		spin_unlock(&ailp->xa_lock);
+		xfs_rui_release(ruip);
 		spin_lock(&ailp->xa_lock);
 
 		lip = xfs_trans_ail_cursor_next(ailp, &cur);
@@ -5144,11 +5458,19 @@ xlog_recover_finish(
 	 */
 	if (log->l_flags & XLOG_RECOVERY_NEEDED) {
 		int	error;
+
+		error = xlog_recover_process_ruis(log);
+		if (error) {
+			xfs_alert(log->l_mp, "Failed to recover RUIs");
+			return error;
+		}
+
 		error = xlog_recover_process_efis(log);
 		if (error) {
 			xfs_alert(log->l_mp, "Failed to recover EFIs");
 			return error;
 		}
+
 		/*
 		 * Sync the log to get all the EFIs out of the AIL.
 		 * This isn't absolutely necessary, but it helps in
@@ -5176,9 +5498,15 @@ xlog_recover_cancel(
 	struct xlog	*log)
 {
 	int		error = 0;
+	int		err2;
 
-	if (log->l_flags & XLOG_RECOVERY_NEEDED)
-		error = xlog_recover_cancel_efis(log);
+	if (log->l_flags & XLOG_RECOVERY_NEEDED) {
+		error = xlog_recover_cancel_ruis(log);
+
+		err2 = xlog_recover_cancel_efis(log);
+		if (err2 && !error)
+			error = err2;
+	}
 
 	return error;
 }
