@@ -358,6 +358,18 @@ gid_t from_kgid_munged(struct user_namespace *targ, kgid_t kgid)
 }
 EXPORT_SYMBOL(from_kgid_munged);
 
+ktag_t make_ktag(struct user_namespace *from, vtag_t tag)
+{
+	return KTAGT_INIT(tag);
+}
+EXPORT_SYMBOL(make_ktag);
+
+vtag_t from_ktag(struct user_namespace *to, ktag_t tag)
+{
+	return __ktag_val(tag);
+}
+EXPORT_SYMBOL(from_ktag);
+
 /**
  *	make_kprojid - Map a user-namespace projid pair into a kprojid.
  *	@ns:  User namespace that the projid is in

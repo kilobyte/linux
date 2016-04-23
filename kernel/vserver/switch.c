@@ -435,19 +435,20 @@ long do_vserver(uint32_t cmd, uint32_t id, void __user *data, int compat)
 		goto out;
 
 	state = 1;
-	if (!capable(CAP_CONTEXT))
+	if (!ns_capable(current_user_ns(), CAP_CONTEXT))
 		goto out;
 
 	state = 2;
 	/* moved here from the individual commands */
 	ret = -EPERM;
-	if ((perm > 1) && !capable(CAP_SYS_ADMIN))
+	if ((perm > 1) && !ns_capable(current_user_ns(), CAP_SYS_ADMIN))
 		goto out;
 
 	state = 3;
 	/* vcmd involves resource management  */
 	ret = -EPERM;
-	if ((flags & VCF_ARES) && !capable(CAP_SYS_RESOURCE))
+	if ((flags & VCF_ARES) &&
+		!ns_capable(current_user_ns(), CAP_SYS_RESOURCE))
 		goto out;
 
 	state = 4;
