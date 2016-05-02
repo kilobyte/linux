@@ -80,6 +80,13 @@ static int utimes_common(struct path *path, struct timespec *times)
 			newattrs.ia_mtime.tv_nsec = times[1].tv_nsec;
 			newattrs.ia_valid |= ATTR_MTIME_SET;
 		}
+
+		/* Allow non-owner to update atime. */
+		if (times[1].tv_nsec == UTIME_OMIT &&
+		    !(newattrs.ia_valid & ATTR_ATIME_SET)) {
+			newattrs.ia_valid &= ~(ATTR_CTIME | ATTR_MTIME);
+			goto only_atime;
+		}
 		/*
 		 * Tell inode_change_ok(), that this is an explicit time
 		 * update, even if neither ATTR_ATIME_SET nor ATTR_MTIME_SET
@@ -87,6 +94,7 @@ static int utimes_common(struct path *path, struct timespec *times)
 		 */
 		newattrs.ia_valid |= ATTR_TIMES_SET;
 	} else {
+only_atime:
 		/*
 		 * If times is NULL (or both times are UTIME_NOW),
 		 * then we need to check permissions, because
