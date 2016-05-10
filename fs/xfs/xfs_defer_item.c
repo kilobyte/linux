@@ -31,6 +31,8 @@
 #include "xfs_trace.h"
 #include "xfs_bmap.h"
 #include "xfs_extfree_item.h"
+#include "xfs_rmap_btree.h"
+#include "xfs_rmap_item.h"
 
 /* Extent Freeing */
 
@@ -136,11 +138,133 @@ const struct xfs_defer_op_type xfs_extent_free_defer_type = {
 	.cancel_item	= xfs_bmap_free_cancel_item,
 };
 
+/* Reverse Mapping */
+
+/* Sort rmap intents by AG. */
+static int
+xfs_rmap_update_diff_items(
+	void				*priv,
+	struct list_head		*a,
+	struct list_head		*b)
+{
+	struct xfs_mount		*mp = priv;
+	struct xfs_rmap_intent		*ra;
+	struct xfs_rmap_intent		*rb;
+
+	ra = container_of(a, struct xfs_rmap_intent, ri_list);
+	rb = container_of(b, struct xfs_rmap_intent, ri_list);
+	return  XFS_FSB_TO_AGNO(mp, ra->ri_bmap.br_startblock) -
+		XFS_FSB_TO_AGNO(mp, rb->ri_bmap.br_startblock);
+}
+
+/* Get an RUI. */
+STATIC void *
+xfs_rmap_update_create_intent(
+	struct xfs_trans		*tp,
+	unsigned int			count)
+{
+	return xfs_trans_get_rui(tp, count);
+}
+
+/* Log rmap updates in the intent item. */
+STATIC void
+xfs_rmap_update_log_item(
+	struct xfs_trans		*tp,
+	void				*intent,
+	struct list_head		*item)
+{
+	struct xfs_rmap_intent		*rmap;
+
+	rmap = container_of(item, struct xfs_rmap_intent, ri_list);
+	xfs_trans_log_start_rmap_update(tp, intent, rmap->ri_type,
+			rmap->ri_owner, rmap->ri_whichfork,
+			rmap->ri_bmap.br_startoff,
+			rmap->ri_bmap.br_startblock,
+			rmap->ri_bmap.br_blockcount,
+			rmap->ri_bmap.br_state);
+}
+
+/* Get an RUD so we can process all the deferred rmap updates. */
+STATIC void *
+xfs_rmap_update_create_done(
+	struct xfs_trans		*tp,
+	void				*intent,
+	unsigned int			count)
+{
+	return xfs_trans_get_rud(tp, intent, count);
+}
+
+/* Process a deferred rmap update. */
+STATIC int
+xfs_rmap_update_finish_item(
+	struct xfs_trans		*tp,
+	struct xfs_defer_ops		*dop,
+	struct list_head		*item,
+	void				*done_item,
+	void				**state)
+{
+	struct xfs_rmap_intent		*rmap;
+	int				error;
+
+	rmap = container_of(item, struct xfs_rmap_intent, ri_list);
+	error = xfs_trans_log_finish_rmap_update(tp, done_item,
+			rmap->ri_type,
+			rmap->ri_owner, rmap->ri_whichfork,
+			rmap->ri_bmap.br_startoff,
+			rmap->ri_bmap.br_startblock,
+			rmap->ri_bmap.br_blockcount,
+			rmap->ri_bmap.br_state);
+	kmem_free(rmap);
+	return error;
+}
+
+/* Clean up after processing deferred rmaps. */
+STATIC void
+xfs_rmap_update_finish_cleanup(
+	struct xfs_trans	*tp,
+	void			*state,
+	int			error)
+{
+}
+
+/* Abort all pending RUIs. */
+STATIC void
+xfs_rmap_update_abort_intent(
+	void				*intent)
+{
+	xfs_rui_release(intent);
+}
+
+/* Cancel a deferred rmap update. */
+STATIC void
+xfs_rmap_update_cancel_item(
+	struct list_head		*item)
+{
+	struct xfs_rmap_intent		*rmap;
+
+	rmap = container_of(item, struct xfs_rmap_intent, ri_list);
+	kmem_free(rmap);
+}
+
+const struct xfs_defer_op_type xfs_rmap_update_defer_type = {
+	.type		= XFS_DEFER_OPS_TYPE_RMAP,
+	.max_items	= XFS_RUI_MAX_FAST_EXTENTS,
+	.diff_items	= xfs_rmap_update_diff_items,
+	.create_intent	= xfs_rmap_update_create_intent,
+	.abort_intent	= xfs_rmap_update_abort_intent,
+	.log_item	= xfs_rmap_update_log_item,
+	.create_done	= xfs_rmap_update_create_done,
+	.finish_item	= xfs_rmap_update_finish_item,
+	.finish_cleanup = xfs_rmap_update_finish_cleanup,
+	.cancel_item	= xfs_rmap_update_cancel_item,
+};
+
 /* Deferred Item Initialization */
 
 /* Initialize the deferred operation types. */
 void
 xfs_defer_init_types(void)
 {
+	xfs_defer_init_op_type(&xfs_rmap_update_defer_type);
 	xfs_defer_init_op_type(&xfs_extent_free_defer_type);
 }
