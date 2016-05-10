@@ -46,6 +46,7 @@
 #include "xfs_quota.h"
 #include "xfs_sysfs.h"
 #include "xfs_ondisk.h"
+#include "xfs_defer.h"
 
 #include <linux/namei.h>
 #include <linux/init.h>
@@ -1850,6 +1851,7 @@ init_xfs_fs(void)
 	printk(KERN_INFO XFS_VERSION_STRING " with "
 			 XFS_BUILD_OPTIONS " enabled\n");
 
+	xfs_defer_init_types();
 	xfs_dir_startup();
 
 	error = xfs_init_zones();

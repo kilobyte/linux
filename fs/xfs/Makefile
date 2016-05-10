@@ -39,6 +39,7 @@ xfs-y				+= $(addprefix libxfs/, \
 				   xfs_btree.o \
 				   xfs_da_btree.o \
 				   xfs_da_format.o \
+				   xfs_defer.o \
 				   xfs_dir2.o \
 				   xfs_dir2_block.o \
 				   xfs_dir2_data.o \
@@ -66,6 +67,7 @@ xfs-y				+= xfs_aops.o \
 				   xfs_attr_list.o \
 				   xfs_bmap_util.o \
 				   xfs_buf.o \
+				   xfs_defer_item.o \
 				   xfs_dir2_readdir.o \
 				   xfs_discard.o \
 				   xfs_error.o \
