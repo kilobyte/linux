@@ -947,7 +947,8 @@ xfs_buf_trylock(
 	if (locked)
 		XB_SET_OWNER(bp);
 
-	trace_xfs_buf_trylock(bp, _RET_IP_);
+	locked ? trace_xfs_buf_trylock(bp, _RET_IP_) :
+		 trace_xfs_buf_trylock_fail(bp, _RET_IP_);
 	return locked;
 }
 
