@@ -688,6 +688,8 @@ struct xfs_phys_extent {
 #define XFS_REFCOUNT_EXTENT_FREE_COW	4
 #define XFS_REFCOUNT_EXTENT_TYPE_MASK	0xFF
 
+#define XFS_REFCOUNT_EXTENT_FLAGS	(XFS_REFCOUNT_EXTENT_TYPE_MASK)
+
 /*
  * This is the structure used to lay out a cui log item in the
  * log.  The cui_extents field is a variable size array whose
