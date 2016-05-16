@@ -112,7 +112,9 @@ static inline uint xlog_get_cycle(char *ptr)
 #define XLOG_REG_TYPE_ICREATE		20
 #define XLOG_REG_TYPE_RUI_FORMAT	21
 #define XLOG_REG_TYPE_RUD_FORMAT	22
-#define XLOG_REG_TYPE_MAX		22
+#define XLOG_REG_TYPE_CUI_FORMAT	23
+#define XLOG_REG_TYPE_CUD_FORMAT	24
+#define XLOG_REG_TYPE_MAX		24
 
 /*
  * Flags to log operation header
@@ -231,6 +233,8 @@ typedef struct xfs_trans_header {
 #define	XFS_LI_ICREATE		0x123f
 #define	XFS_LI_RUI		0x1240	/* rmap update intent */
 #define	XFS_LI_RUD		0x1241
+#define	XFS_LI_CUI		0x1242	/* refcount update intent */
+#define	XFS_LI_CUD		0x1243
 
 #define XFS_LI_TYPE_DESC \
 	{ XFS_LI_EFI,		"XFS_LI_EFI" }, \
@@ -242,7 +246,9 @@ typedef struct xfs_trans_header {
 	{ XFS_LI_QUOTAOFF,	"XFS_LI_QUOTAOFF" }, \
 	{ XFS_LI_ICREATE,	"XFS_LI_ICREATE" }, \
 	{ XFS_LI_RUI,		"XFS_LI_RUI" }, \
-	{ XFS_LI_RUD,		"XFS_LI_RUD" }
+	{ XFS_LI_RUD,		"XFS_LI_RUD" }, \
+	{ XFS_LI_CUI,		"XFS_LI_CUI" }, \
+	{ XFS_LI_CUD,		"XFS_LI_CUD" }
 
 /*
  * Inode Log Item Format definitions.
@@ -664,6 +670,48 @@ struct xfs_rud_log_format {
 	__uint32_t		rud_nextents;	/* # of extents freed */
 	__uint64_t		rud_rui_id;	/* id of corresponding rui */
 	struct xfs_map_extent	rud_extents[1];	/* array of extents rmapped */
+};
+
+/*
+ * CUI/CUD (refcount update) log format definitions
+ */
+struct xfs_phys_extent {
+	__uint64_t		pe_startblock;
+	__uint32_t		pe_len;
+	__uint32_t		pe_flags;
+};
+
+/* refcount pe_flags: upper bits are flags, lower byte is type code */
+#define XFS_REFCOUNT_EXTENT_INCREASE	1
+#define XFS_REFCOUNT_EXTENT_DECREASE	2
+#define XFS_REFCOUNT_EXTENT_ALLOC_COW	3
+#define XFS_REFCOUNT_EXTENT_FREE_COW	4
+#define XFS_REFCOUNT_EXTENT_TYPE_MASK	0xFF
+
+/*
+ * This is the structure used to lay out a cui log item in the
+ * log.  The cui_extents field is a variable size array whose
+ * size is given by cui_nextents.
+ */
+struct xfs_cui_log_format {
+	__uint16_t		cui_type;	/* cui log item type */
+	__uint16_t		cui_size;	/* size of this item */
+	__uint32_t		cui_nextents;	/* # extents to free */
+	__uint64_t		cui_id;		/* cui identifier */
+	struct xfs_phys_extent	cui_extents[1];	/* array of extents */
+};
+
+/*
+ * This is the structure used to lay out a cud log item in the
+ * log.  The cud_extents array is a variable size array whose
+ * size is given by cud_nextents;
+ */
+struct xfs_cud_log_format {
+	__uint16_t		cud_type;	/* cud log item type */
+	__uint16_t		cud_size;	/* size of this item */
+	__uint32_t		cud_nextents;	/* # of extents freed */
+	__uint64_t		cud_cui_id;	/* id of corresponding cui */
+	struct xfs_phys_extent	cud_extents[1];	/* array of extents */
 };
 
 /*
