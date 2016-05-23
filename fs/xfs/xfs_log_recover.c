@@ -48,6 +48,8 @@
 #include "xfs_rmap_btree.h"
 #include "xfs_refcount_item.h"
 #include "xfs_refcount.h"
+#include "xfs_bmap_item.h"
+#include "xfs_bmap.h"
 
 #define BLK_AVG(blk1, blk2)	((blk1+blk2) >> 1)
 
@@ -1920,6 +1922,8 @@ xlog_recover_reorder_trans(
 		case XFS_LI_RUD:
 		case XFS_LI_CUI:
 		case XFS_LI_CUD:
+		case XFS_LI_BUI:
+		case XFS_LI_BUD:
 			trace_xfs_log_recover_item_reorder_tail(log,
 							trans, item, pass);
 			list_move_tail(&item->ri_list, &inode_list);
@@ -3622,6 +3626,101 @@ xlog_recover_cud_pass2(
 }
 
 /*
+ * This routine is called to create an in-core extent bmap update
+ * item from the bui format structure which was logged on disk.
+ * It allocates an in-core bui, copies the extents from the format
+ * structure into it, and adds the bui to the AIL with the given
+ * LSN.
+ */
+STATIC int
+xlog_recover_bui_pass2(
+	struct xlog			*log,
+	struct xlog_recover_item	*item,
+	xfs_lsn_t			lsn)
+{
+	int				error;
+	struct xfs_mount		*mp = log->l_mp;
+	struct xfs_bui_log_item		*buip;
+	struct xfs_bui_log_format	*bui_formatp;
+
+	bui_formatp = item->ri_buf[0].i_addr;
+
+	buip = xfs_bui_init(mp, bui_formatp->bui_nextents);
+	error = xfs_bui_copy_format(&item->ri_buf[0], &buip->bui_format);
+	if (error) {
+		xfs_bui_item_free(buip);
+		return error;
+	}
+	atomic_set(&buip->bui_next_extent, bui_formatp->bui_nextents);
+
+	spin_lock(&log->l_ailp->xa_lock);
+	/*
+	 * The RUI has two references. One for the RUD and one for RUI to ensure
+	 * it makes it into the AIL. Insert the RUI into the AIL directly and
+	 * drop the RUI reference. Note that xfs_trans_ail_update() drops the
+	 * AIL lock.
+	 */
+	xfs_trans_ail_update(log->l_ailp, &buip->bui_item, lsn);
+	xfs_bui_release(buip);
+	return 0;
+}
+
+
+/*
+ * This routine is called when an BUD format structure is found in a committed
+ * transaction in the log. Its purpose is to cancel the corresponding BUI if it
+ * was still in the log. To do this it searches the AIL for the BUI with an id
+ * equal to that in the BUD format structure. If we find it we drop the BUD
+ * reference, which removes the BUI from the AIL and frees it.
+ */
+STATIC int
+xlog_recover_bud_pass2(
+	struct xlog			*log,
+	struct xlog_recover_item	*item)
+{
+	struct xfs_bud_log_format	*bud_formatp;
+	struct xfs_bui_log_item		*buip = NULL;
+	struct xfs_log_item		*lip;
+	__uint64_t			bui_id;
+	struct xfs_ail_cursor		cur;
+	struct xfs_ail			*ailp = log->l_ailp;
+
+	bud_formatp = item->ri_buf[0].i_addr;
+	ASSERT(item->ri_buf[0].i_len == (sizeof(struct xfs_bud_log_format) +
+			((bud_formatp->bud_nextents - 1) *
+			sizeof(struct xfs_map_extent))));
+	bui_id = bud_formatp->bud_bui_id;
+
+	/*
+	 * Search for the BUI with the id in the BUD format structure in the
+	 * AIL.
+	 */
+	spin_lock(&ailp->xa_lock);
+	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
+	while (lip != NULL) {
+		if (lip->li_type == XFS_LI_BUI) {
+			buip = (struct xfs_bui_log_item *)lip;
+			if (buip->bui_format.bui_id == bui_id) {
+				/*
+				 * Drop the BUD reference to the BUI. This
+				 * removes the BUI from the AIL and frees it.
+				 */
+				spin_unlock(&ailp->xa_lock);
+				xfs_bui_release(buip);
+				spin_lock(&ailp->xa_lock);
+				break;
+			}
+		}
+		lip = xfs_trans_ail_cursor_next(ailp, &cur);
+	}
+
+	xfs_trans_ail_cursor_done(&cur);
+	spin_unlock(&ailp->xa_lock);
+
+	return 0;
+}
+
+/*
  * This routine is called when an inode create format structure is found in a
  * committed transaction in the log.  It's purpose is to initialise the inodes
  * being allocated on disk. This requires us to get inode cluster buffers that
@@ -3850,6 +3949,8 @@ xlog_recover_ra_pass2(
 	case XFS_LI_RUD:
 	case XFS_LI_CUI:
 	case XFS_LI_CUD:
+	case XFS_LI_BUI:
+	case XFS_LI_BUD:
 	default:
 		break;
 	}
@@ -3877,6 +3978,8 @@ xlog_recover_commit_pass1(
 	case XFS_LI_RUD:
 	case XFS_LI_CUI:
 	case XFS_LI_CUD:
+	case XFS_LI_BUI:
+	case XFS_LI_BUD:
 		/* nothing to do in pass 1 */
 		return 0;
 	default:
@@ -3915,6 +4018,10 @@ xlog_recover_commit_pass2(
 		return xlog_recover_cui_pass2(log, item, trans->r_lsn);
 	case XFS_LI_CUD:
 		return xlog_recover_cud_pass2(log, item);
+	case XFS_LI_BUI:
+		return xlog_recover_bui_pass2(log, item, trans->r_lsn);
+	case XFS_LI_BUD:
+		return xlog_recover_bud_pass2(log, item);
 	case XFS_LI_DQUOT:
 		return xlog_recover_dquot_pass2(log, buffer_list, item,
 						trans->r_lsn);
@@ -4394,6 +4501,7 @@ static inline bool xlog_item_is_intent(struct xfs_log_item *lip)
 	case XFS_LI_EFI:
 	case XFS_LI_RUI:
 	case XFS_LI_CUI:
+	case XFS_LI_BUI:
 		return true;
 	default:
 		return false;
@@ -5068,6 +5176,187 @@ xlog_recover_cancel_cuis(
 
 		spin_unlock(&ailp->xa_lock);
 		xfs_cui_release(cuip);
+		spin_lock(&ailp->xa_lock);
+
+		lip = xfs_trans_ail_cursor_next(ailp, &cur);
+	}
+
+	xfs_trans_ail_cursor_done(&cur);
+	spin_unlock(&ailp->xa_lock);
+	return error;
+}
+
+/*
+ * Process a bmap update intent item that was recovered from the log.
+ * We need to update some inode's bmbt.
+ */
+STATIC int
+xlog_recover_process_bui(
+	struct xfs_mount		*mp,
+	struct xfs_bui_log_item		*buip)
+{
+	int				i;
+	int				error = 0;
+	struct xfs_map_extent		*bmap;
+	xfs_fsblock_t			startblock_fsb;
+	xfs_fsblock_t			inode_fsb;
+	bool				op_ok;
+
+	ASSERT(!test_bit(XFS_BUI_RECOVERED, &buip->bui_flags));
+
+	/*
+	 * First check the validity of the extents described by the
+	 * BUI.  If any are bad, then assume that all are bad and
+	 * just toss the BUI.
+	 */
+	for (i = 0; i < buip->bui_format.bui_nextents; i++) {
+		bmap = &(buip->bui_format.bui_extents[i]);
+		startblock_fsb = XFS_BB_TO_FSB(mp,
+				   XFS_FSB_TO_DADDR(mp, bmap->me_startblock));
+		inode_fsb = XFS_BB_TO_FSB(mp, XFS_FSB_TO_DADDR(mp,
+				XFS_INO_TO_FSB(mp, bmap->me_owner)));
+		switch (bmap->me_flags & XFS_BMAP_EXTENT_TYPE_MASK) {
+		case XFS_BMAP_EXTENT_MAP:
+		case XFS_BMAP_EXTENT_UNMAP:
+			op_ok = true;
+			break;
+		default:
+			op_ok = false;
+			break;
+		}
+		if (!op_ok || (startblock_fsb == 0) ||
+		    (bmap->me_len == 0) ||
+		    (inode_fsb == 0) ||
+		    (startblock_fsb >= mp->m_sb.sb_dblocks) ||
+		    (bmap->me_len >= mp->m_sb.sb_agblocks) ||
+		    (inode_fsb >= mp->m_sb.sb_agblocks) ||
+		    (bmap->me_flags & ~XFS_BMAP_EXTENT_FLAGS)) {
+			/*
+			 * This will pull the BUI from the AIL and
+			 * free the memory associated with it.
+			 */
+			set_bit(XFS_BUI_RECOVERED, &buip->bui_flags);
+			xfs_bui_release(buip);
+			return -EIO;
+		}
+	}
+
+	/* XXX: do nothing for now */
+	set_bit(XFS_BUI_RECOVERED, &buip->bui_flags);
+	xfs_bui_release(buip);
+	return error;
+}
+
+/*
+ * When this is called, all of the BUIs which did not have
+ * corresponding BUDs should be in the AIL.  What we do now
+ * is update the bmbts associated with each one.
+ *
+ * Since we process the BUIs in normal transactions, they
+ * will be removed at some point after the commit.  This prevents
+ * us from just walking down the list processing each one.
+ * We'll use a flag in the BUI to skip those that we've already
+ * processed and use the AIL iteration mechanism's generation
+ * count to try to speed this up at least a bit.
+ *
+ * When we start, we know that the BUIs are the only things in
+ * the AIL.  As we process them, however, other items are added
+ * to the AIL.
+ */
+STATIC int
+xlog_recover_process_buis(
+	struct xlog		*log)
+{
+	struct xfs_log_item	*lip;
+	struct xfs_bui_log_item	*buip;
+	int			error = 0;
+	struct xfs_ail_cursor	cur;
+	struct xfs_ail		*ailp;
+
+	ailp = log->l_ailp;
+	spin_lock(&ailp->xa_lock);
+	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
+	while (lip != NULL) {
+		/*
+		 * We're done when we see something other than an intent.
+		 * There should be no intents left in the AIL now.
+		 */
+		if (!xlog_item_is_intent(lip)) {
+#ifdef DEBUG
+			for (; lip; lip = xfs_trans_ail_cursor_next(ailp, &cur))
+				ASSERT(!xlog_item_is_intent(lip));
+#endif
+			break;
+		}
+
+		/* Skip anything that isn't a BUI */
+		if (lip->li_type != XFS_LI_BUI) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
+		}
+
+		/*
+		 * Skip BUIs that we've already processed.
+		 */
+		buip = container_of(lip, struct xfs_bui_log_item, bui_item);
+		if (test_bit(XFS_BUI_RECOVERED, &buip->bui_flags)) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
+		}
+
+		spin_unlock(&ailp->xa_lock);
+		error = xlog_recover_process_bui(log->l_mp, buip);
+		spin_lock(&ailp->xa_lock);
+		if (error)
+			goto out;
+		lip = xfs_trans_ail_cursor_next(ailp, &cur);
+	}
+out:
+	xfs_trans_ail_cursor_done(&cur);
+	spin_unlock(&ailp->xa_lock);
+	return error;
+}
+
+/*
+ * A cancel occurs when the mount has failed and we're bailing out. Release all
+ * pending BUIs so they don't pin the AIL.
+ */
+STATIC int
+xlog_recover_cancel_buis(
+	struct xlog		*log)
+{
+	struct xfs_log_item	*lip;
+	struct xfs_bui_log_item	*buip;
+	int			error = 0;
+	struct xfs_ail_cursor	cur;
+	struct xfs_ail		*ailp;
+
+	ailp = log->l_ailp;
+	spin_lock(&ailp->xa_lock);
+	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
+	while (lip != NULL) {
+		/*
+		 * We're done when we see something other than an RUI.
+		 * There should be no RUIs left in the AIL now.
+		 */
+		if (!xlog_item_is_intent(lip)) {
+#ifdef DEBUG
+			for (; lip; lip = xfs_trans_ail_cursor_next(ailp, &cur))
+				ASSERT(!xlog_item_is_intent(lip));
+#endif
+			break;
+		}
+
+		/* Skip anything that isn't a BUI */
+		if (lip->li_type != XFS_LI_BUI) {
+			lip = xfs_trans_ail_cursor_next(ailp, &cur);
+			continue;
+		}
+
+		buip = container_of(lip, struct xfs_bui_log_item, bui_item);
+
+		spin_unlock(&ailp->xa_lock);
+		xfs_bui_release(buip);
 		spin_lock(&ailp->xa_lock);
 
 		lip = xfs_trans_ail_cursor_next(ailp, &cur);
@@ -5881,6 +6170,12 @@ xlog_recover_finish(
 	if (log->l_flags & XLOG_RECOVERY_NEEDED) {
 		int	error;
 
+		error = xlog_recover_process_buis(log);
+		if (error) {
+			xfs_alert(log->l_mp, "Failed to recover BUIs");
+			return error;
+		}
+
 		error = xlog_recover_process_cuis(log);
 		if (error) {
 			xfs_alert(log->l_mp, "Failed to recover CUIs");
@@ -5929,7 +6224,11 @@ xlog_recover_cancel(
 	int		err2;
 
 	if (log->l_flags & XLOG_RECOVERY_NEEDED) {
-		error = xlog_recover_cancel_cuis(log);
+		error = xlog_recover_cancel_buis(log);
+
+		err2 = xlog_recover_cancel_cuis(log);
+		if (err2 && !error)
+			error = err2;
 
 		err2 = xlog_recover_cancel_ruis(log);
 		if (err2 && !error)
