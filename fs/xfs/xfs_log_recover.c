@@ -5201,6 +5201,14 @@ xlog_recover_process_bui(
 	xfs_fsblock_t			startblock_fsb;
 	xfs_fsblock_t			inode_fsb;
 	bool				op_ok;
+	struct xfs_bud_log_item		*budp;
+	enum xfs_bmap_intent_type	type;
+	int				whichfork;
+	xfs_exntst_t			state;
+	struct xfs_trans		*tp;
+	struct xfs_inode		**ips;
+	struct xfs_defer_ops		dfops;
+	xfs_fsblock_t			firstfsb;
 
 	ASSERT(!test_bit(XFS_BUI_RECOVERED, &buip->bui_flags));
 
@@ -5241,9 +5249,74 @@ xlog_recover_process_bui(
 		}
 	}
 
-	/* XXX: do nothing for now */
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_itruncate, 0, 0, 0, &tp);
+	if (error)
+		return error;
+	budp = xfs_trans_get_bud(tp, buip, buip->bui_format.bui_nextents);
+
+	xfs_defer_init(&dfops, &firstfsb);
+
+	/* Grab all the inodes we'll need. */
+	ips = kmem_zalloc(sizeof(struct xfs_inode *) *
+				buip->bui_format.bui_nextents, KM_SLEEP);
+	for (i = 0; i < buip->bui_format.bui_nextents; i++) {
+		bmap = &(buip->bui_format.bui_extents[i]);
+		error = xfs_iget(mp, tp, bmap->me_owner, 0, XFS_ILOCK_EXCL,
+				&ips[i]);
+		if (error)
+			goto err_inodes;
+	}
+
+	/* Process deferred bmap items. */
+	for (i = 0; i < buip->bui_format.bui_nextents; i++) {
+		bmap = &(buip->bui_format.bui_extents[i]);
+		state = (bmap->me_flags & XFS_BMAP_EXTENT_UNWRITTEN) ?
+				XFS_EXT_UNWRITTEN : XFS_EXT_NORM;
+		whichfork = (bmap->me_flags & XFS_BMAP_EXTENT_ATTR_FORK) ?
+				XFS_ATTR_FORK : XFS_DATA_FORK;
+		switch (bmap->me_flags & XFS_BMAP_EXTENT_TYPE_MASK) {
+		case XFS_BMAP_EXTENT_MAP:
+			type = XFS_BMAP_MAP;
+			break;
+		case XFS_BMAP_EXTENT_UNMAP:
+			type = XFS_BMAP_UNMAP;
+			break;
+		default:
+			error = -EFSCORRUPTED;
+			goto err_dfops;
+		}
+		xfs_trans_ijoin(tp, ips[i], 0);
+
+		error = xfs_trans_log_finish_bmap_update(tp, budp, &dfops, type,
+				ips[i], whichfork, bmap->me_startoff,
+				bmap->me_startblock, bmap->me_len,
+				state);
+		if (error)
+			goto err_dfops;
+
+	}
+
+	/* Finish transaction, free inodes. */
+	error = xfs_defer_finish(&tp, &dfops, NULL);
+	if (error)
+		goto err_dfops;
 	set_bit(XFS_BUI_RECOVERED, &buip->bui_flags);
-	xfs_bui_release(buip);
+	error = xfs_trans_commit(tp);
+	for (i = 0; i < buip->bui_format.bui_nextents; i++) {
+		xfs_iunlock(ips[i], XFS_ILOCK_EXCL);
+		IRELE(ips[i]);
+	}
+
+	return error;
+
+err_dfops:
+	xfs_defer_cancel(&dfops);
+err_inodes:
+	for (i = 0; i < buip->bui_format.bui_nextents; i++) {
+		xfs_iunlock(ips[i], XFS_ILOCK_EXCL);
+		IRELE(ips[i]);
+	}
+	xfs_trans_cancel(tp);
 	return error;
 }
 

@@ -154,14 +154,14 @@ xfs_trans_log_finish_bmap_update(
 	xfs_fileoff_t			startoff,
 	xfs_fsblock_t			startblock,
 	xfs_filblks_t			blockcount,
-	xfs_exntst_t			state,
-	struct xfs_btree_cur		**pcur)
+	xfs_exntst_t			state)
 {
 	uint				next_extent;
 	struct xfs_map_extent		*bmap;
 	int				error;
 
-	error = -EFSCORRUPTED;
+	error = xfs_bmap_finish_one(tp, dop, ip, type, whichfork, startoff,
+			startblock, blockcount, state);
 
 	/*
 	 * Mark the transaction dirty, even on error. This ensures the
