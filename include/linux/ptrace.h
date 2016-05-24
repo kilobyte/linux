@@ -97,6 +97,12 @@ int generic_ptrace_peekdata(struct task_struct *tsk, unsigned long addr,
 			    unsigned long data);
 int generic_ptrace_pokedata(struct task_struct *tsk, unsigned long addr,
 			    unsigned long data);
+int ptrace_traceme(void);
+struct task_struct *ptrace_get_task_struct(pid_t pid);
+int ptrace_attach(struct task_struct *task, long request,
+			 unsigned long addr, unsigned long flags);
+int ptrace_check_attach(struct task_struct *child, bool ignore_state);
+void ptrace_unfreeze_traced(struct task_struct *task);
 
 /**
  * ptrace_parent - return the task that is tracing the given task

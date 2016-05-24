@@ -74,7 +74,7 @@ __SYSCALL(__NR_getuid, sys_getuid16)
 			/* 25 was sys_stime */
 __SYSCALL(25, sys_ni_syscall)
 #define __NR_ptrace 26
-__SYSCALL(__NR_ptrace, compat_sys_ptrace)
+__SYSCALL(__NR_ptrace, compat_sys_aarch32_ptrace)
 			/* 27 was sys_alarm */
 __SYSCALL(27, sys_ni_syscall)
 			/* 28 was sys_fstat */

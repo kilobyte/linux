@@ -136,7 +136,7 @@ static bool ptrace_freeze_traced(struct task_struct *task)
 	return ret;
 }
 
-static void ptrace_unfreeze_traced(struct task_struct *task)
+void ptrace_unfreeze_traced(struct task_struct *task)
 {
 	if (task->state != __TASK_TRACED)
 		return;
@@ -168,7 +168,7 @@ static void ptrace_unfreeze_traced(struct task_struct *task)
  * RETURNS:
  * 0 on success, -ESRCH if %child is not ready.
  */
-static int ptrace_check_attach(struct task_struct *child, bool ignore_state)
+int ptrace_check_attach(struct task_struct *child, bool ignore_state)
 {
 	int ret = -ESRCH;
 
@@ -292,7 +292,7 @@ bool ptrace_may_access(struct task_struct *task, unsigned int mode)
 	return !err;
 }
 
-static int ptrace_attach(struct task_struct *task, long request,
+int ptrace_attach(struct task_struct *task, long request,
 			 unsigned long addr,
 			 unsigned long flags)
 {
@@ -406,7 +406,7 @@ out:
  * Performs checks and sets PT_PTRACED.
  * Should be used by all ptrace implementations for PTRACE_TRACEME.
  */
-static int ptrace_traceme(void)
+ int ptrace_traceme(void)
 {
 	int ret = -EPERM;
 
@@ -1056,7 +1056,7 @@ int ptrace_request(struct task_struct *child, long request,
 	return ret;
 }
 
-static struct task_struct *ptrace_get_task_struct(pid_t pid)
+struct task_struct *ptrace_get_task_struct(pid_t pid)
 {
 	struct task_struct *child;
 

@@ -38,6 +38,7 @@ asmlinkage long compat_sys_fadvise64_64_wrapper(void);
 asmlinkage long compat_sys_sync_file_range2_wrapper(void);
 asmlinkage long compat_sys_fallocate_wrapper(void);
 asmlinkage long compat_sys_mmap2_wrapper(void);
+asmlinkage long compat_sys_aarch32_ptrace(void);
 
 #undef __SYSCALL
 #define __SYSCALL(nr, sym)	[nr] = sym,
