@@ -1172,8 +1172,9 @@ xfs_refcount_decrease_extent(
  * extent we find.  If no shared blocks are found, flen will be set to zero.
  */
 int
-xfs_refcount_find_shared(
+__xfs_refcount_find_shared(
 	struct xfs_mount	*mp,
+	struct xfs_buf		*agbp,
 	xfs_agnumber_t		agno,
 	xfs_agblock_t		agbno,
 	xfs_extlen_t		aglen,
@@ -1182,23 +1183,13 @@ xfs_refcount_find_shared(
 	bool			find_maximal)
 {
 	struct xfs_btree_cur	*cur;
-	struct xfs_buf		*agbp;
 	struct xfs_refcount_irec	tmp;
-	int			error;
 	int			i, have;
 	int			bt_error = XFS_BTREE_ERROR;
+	int			error;
 
 	trace_xfs_refcount_find_shared(mp, agno, agbno, aglen);
 
-	if (xfs_always_cow) {
-		*fbno = agbno;
-		*flen = aglen;
-		return 0;
-	}
-
-	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
-	if (error)
-		goto out;
 	cur = xfs_refcountbt_init_cursor(mp, NULL, agbp, agno, NULL);
 
 	/* By default, skip the whole range */
@@ -1273,10 +1264,42 @@ done:
 
 out_error:
 	xfs_btree_del_cursor(cur, bt_error);
-	xfs_buf_relse(agbp);
-out:
 	if (error)
 		trace_xfs_refcount_find_shared_error(mp, agno, error, _RET_IP_);
+	return error;
+}
+
+/*
+ * Given an AG extent, find the lowest-numbered run of shared blocks within
+ * that range and return the range in fbno/flen.
+ */
+int
+xfs_refcount_find_shared(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_agblock_t		agbno,
+	xfs_extlen_t		aglen,
+	xfs_agblock_t		*fbno,
+	xfs_extlen_t		*flen,
+	bool			find_maximal)
+{
+	struct xfs_buf		*agbp;
+	int			error;
+
+	if (xfs_always_cow) {
+		*fbno = agbno;
+		*flen = aglen;
+		return 0;
+	}
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
+	if (error)
+		return error;
+
+	error = __xfs_refcount_find_shared(mp, agbp, agno, agbno, aglen,
+			fbno, flen, find_maximal);
+
+	xfs_buf_relse(agbp);
 	return error;
 }
 

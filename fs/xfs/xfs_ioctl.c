@@ -42,6 +42,7 @@
 #include "xfs_pnfs.h"
 #include "xfs_acl.h"
 #include "xfs_reflink.h"
+#include "xfs_btree.h"
 
 #include <linux/capability.h>
 #include <linux/dcache.h>
@@ -1611,6 +1612,76 @@ xfs_ioc_getbmapx(
 	return 0;
 }
 
+struct getfsmapx_info {
+	struct xfs_mount	*mp;
+	struct getfsmapx __user	*data;
+	__s64			last_flags;
+};
+
+STATIC int
+xfs_getfsmapx_format(struct getfsmapx *fmv, void *priv)
+{
+	struct getfsmapx_info	*info = priv;
+
+	trace_xfs_getfsmap_mapping(info->mp, fmv->fmv_block,
+			fmv->fmv_length, fmv->fmv_owner,
+			fmv->fmv_offset, fmv->fmv_oflags);
+
+	info->last_flags = fmv->fmv_oflags;
+	if (copy_to_user(info->data, fmv, sizeof(struct getfsmapx)))
+		return -EFAULT;
+
+	info->data++;
+	return 0;
+}
+
+STATIC int
+xfs_ioc_getfsmapx(
+	struct xfs_inode	*ip,
+	void			__user *arg)
+{
+	struct getfsmapx_info	info;
+	struct getfsmapx	fmx[2];
+	bool			aborted = false;
+	int			error;
+
+	if (copy_from_user(&fmx, arg, 2 * sizeof(struct getfsmapx)))
+		return -EFAULT;
+
+	trace_xfs_getfsmap_low_key(ip->i_mount, fmx[0].fmv_block,
+			fmx[0].fmv_length, fmx[0].fmv_owner,
+			fmx[0].fmv_offset, fmx[0].fmv_oflags);
+
+	trace_xfs_getfsmap_high_key(ip->i_mount, fmx[1].fmv_block,
+			fmx[1].fmv_length, fmx[1].fmv_owner,
+			fmx[1].fmv_offset, fmx[1].fmv_oflags);
+
+	info.mp = ip->i_mount;
+	info.data = (__force struct getfsmapx *)arg + 2;
+	error = xfs_getfsmap(ip->i_mount, fmx, xfs_getfsmapx_format, &info);
+	if (error == XFS_BTREE_QUERY_RANGE_ABORT) {
+		error = 0;
+		aborted = true;
+	}
+	if (error)
+		return error;
+
+	/* If we didn't abort, set the "last" flag in the last fmx */
+	if (!aborted && fmx[0].fmv_entries) {
+		info.data--;
+		info.last_flags |= FMV_OF_LAST;
+		if (copy_to_user(&info.data->fmv_oflags, &info.last_flags,
+				sizeof(info.last_flags)))
+			return -EFAULT;
+	}
+
+	/* copy back header */
+	if (copy_to_user(arg, fmx, 2 * sizeof(struct getfsmapx)))
+		return -EFAULT;
+
+	return 0;
+}
+
 int
 xfs_ioc_swapext(
 	xfs_swapext_t	*sxp)
@@ -1789,6 +1860,11 @@ xfs_file_ioctl(
 
 	case XFS_IOC_GETBMAPX:
 		return xfs_ioc_getbmapx(ip, arg);
+
+	case XFS_IOC_GETFSMAPX:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+		return xfs_ioc_getfsmapx(ip, arg);
 
 	case XFS_IOC_FD_TO_HANDLE:
 	case XFS_IOC_PATH_TO_HANDLE:

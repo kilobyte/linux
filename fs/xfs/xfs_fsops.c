@@ -44,6 +44,8 @@
 #include "xfs_filestream.h"
 #include "xfs_refcount_btree.h"
 #include "xfs_ag_resv.h"
+#include "xfs_bit.h"
+#include "xfs_refcount.h"
 
 /*
  * File system operations
@@ -1026,4 +1028,340 @@ xfs_fs_unreserve_ag_blocks(
 
 	if (error)
 		xfs_warn(mp, "Error %d unreserving metadata blocks.", error);
+}
+
+struct xfs_getfsmap_info {
+	struct getfsmapx	*fmv;
+	xfs_fsmap_format_t	formatter;
+	void			*format_arg;
+	xfs_daddr_t		next_daddr;
+	bool			last;
+	xfs_agnumber_t		start_ag;
+	struct xfs_rmap_irec	low;
+};
+
+/* Compare a record against our starting point */
+static bool
+xfs_getfsmap_compare(
+	xfs_agnumber_t			agno,
+	struct xfs_getfsmap_info	*info,
+	struct xfs_rmap_irec		*rec)
+{
+	uint64_t			x, y;
+
+	if (rec->rm_startblock < info->low.rm_startblock)
+		return true;
+	if (rec->rm_startblock > info->low.rm_startblock)
+		return false;
+
+	if (rec->rm_owner < info->low.rm_owner)
+		return true;
+	if (rec->rm_owner > info->low.rm_owner)
+		return false;
+
+	x = xfs_rmap_irec_offset_pack(rec);
+	y = xfs_rmap_irec_offset_pack(&info->low);
+	if (x < y)
+		return true;
+	return false;
+}
+
+STATIC bool
+xfs_getfsmap_is_shared(
+	struct xfs_btree_cur	*cur,
+	struct xfs_rmap_irec	*rec)
+{
+	xfs_agblock_t		fbno;
+	xfs_extlen_t		flen;
+	int			error;
+
+	if (!xfs_sb_version_hasreflink(&cur->bc_mp->m_sb))
+		return false;
+
+	/* Are there any shared blocks here? */
+	flen = 0;
+	error = __xfs_refcount_find_shared(cur->bc_mp, cur->bc_private.a.agbp,
+			cur->bc_private.a.agno, rec->rm_startblock,
+			rec->rm_blockcount, &fbno, &flen, false);
+	return error == 0 && flen > 0;
+}
+
+/* Transform a rmap irec into a fsmapx */
+STATIC int
+xfs_getfsmap_helper(
+	struct xfs_btree_cur		*cur,
+	struct xfs_rmap_irec		*rec,
+	void				*priv)
+{
+	struct xfs_mount		*mp = cur->bc_mp;
+	struct xfs_getfsmap_info	*info = priv;
+	xfs_fsblock_t			fsb;
+	struct getfsmapx		fmv;
+	xfs_daddr_t			rec_daddr;
+	int				error;
+
+	fsb = XFS_AGB_TO_FSB(mp, cur->bc_private.a.agno,
+			rec->rm_startblock);
+	rec_daddr = XFS_FSB_TO_DADDR(mp, fsb);
+
+	/*
+	 * Filter out records that start before our startpoint, if the caller
+	 * requested that.
+	 */
+	if (info->fmv->fmv_length &&
+	    xfs_getfsmap_compare(cur->bc_private.a.agno, info, rec)) {
+		rec_daddr = XFS_FSB_TO_DADDR(mp, fsb +
+				rec->rm_blockcount);
+		if (info->next_daddr < rec_daddr)
+			info->next_daddr = rec_daddr;
+		return XFS_BTREE_QUERY_RANGE_CONTINUE;
+	}
+
+	/* We're just counting mappings */
+	if (info->fmv->fmv_count == 2) {
+		if (rec_daddr > info->next_daddr)
+			info->fmv->fmv_entries++;
+
+		if (info->last)
+			return XFS_BTREE_QUERY_RANGE_CONTINUE;
+
+		info->fmv->fmv_entries++;
+
+		rec_daddr = XFS_FSB_TO_DADDR(mp, fsb +
+				rec->rm_blockcount);
+		if (info->next_daddr < rec_daddr)
+			info->next_daddr = rec_daddr;
+		return XFS_BTREE_QUERY_RANGE_CONTINUE;
+	}
+
+	/* Did we find some free space? */
+	if (rec_daddr > info->next_daddr) {
+		if (info->fmv->fmv_entries >= info->fmv->fmv_count - 2)
+			return XFS_BTREE_QUERY_RANGE_ABORT;
+
+		trace_xfs_fsmap_mapping(mp, cur->bc_private.a.agno,
+				XFS_DADDR_TO_FSB(mp, info->next_daddr),
+				XFS_DADDR_TO_FSB(mp, rec_daddr -
+						info->next_daddr),
+				FMV_OWN_FREE, 0);
+
+		fmv.fmv_device = new_encode_dev(mp->m_ddev_targp->bt_dev);
+		fmv.fmv_block = info->next_daddr;
+		fmv.fmv_owner = FMV_OWN_FREE;
+		fmv.fmv_offset = 0;
+		fmv.fmv_length = rec_daddr - info->next_daddr;
+		fmv.fmv_oflags = FMV_OF_SPECIAL_OWNER;
+		fmv.fmv_count = 0;
+		fmv.fmv_entries = 0;
+		fmv.fmv_unused1 = 0;
+		fmv.fmv_unused2 = 0;
+		error = info->formatter(&fmv, info->format_arg);
+		if (error)
+			return error;
+		info->fmv->fmv_entries++;
+	}
+
+	if (info->last)
+		goto out;
+
+	/* Fill out the extent we found */
+	if (info->fmv->fmv_entries >= info->fmv->fmv_count - 2)
+		return XFS_BTREE_QUERY_RANGE_ABORT;
+
+	trace_xfs_fsmap_mapping(mp, cur->bc_private.a.agno,
+			rec->rm_startblock, rec->rm_blockcount, rec->rm_owner,
+			rec->rm_offset);
+
+	fmv.fmv_device = new_encode_dev(mp->m_ddev_targp->bt_dev);
+	fmv.fmv_block = rec_daddr;
+	fmv.fmv_owner = rec->rm_owner;
+	fmv.fmv_offset = XFS_FSB_TO_BB(mp, rec->rm_offset);
+	fmv.fmv_length = XFS_FSB_TO_BB(mp, rec->rm_blockcount);
+	fmv.fmv_oflags = 0;
+	fmv.fmv_count = 0;
+	fmv.fmv_entries = 0;
+	fmv.fmv_unused1 = 0;
+	fmv.fmv_unused2 = 0;
+	if (XFS_RMAP_NON_INODE_OWNER(rec->rm_owner))
+		fmv.fmv_oflags |= FMV_OF_SPECIAL_OWNER;
+	if (rec->rm_flags & XFS_RMAP_UNWRITTEN)
+		fmv.fmv_oflags |= FMV_OF_PREALLOC;
+	if (rec->rm_flags & XFS_RMAP_ATTR_FORK)
+		fmv.fmv_oflags |= FMV_OF_ATTR_FORK;
+	if (rec->rm_flags & XFS_RMAP_BMBT_BLOCK)
+		fmv.fmv_oflags |= FMV_OF_EXTENT_MAP;
+	if (fmv.fmv_oflags == 0 && xfs_getfsmap_is_shared(cur, rec))
+		fmv.fmv_oflags |= FMV_OF_SHARED;
+	error = info->formatter(&fmv, info->format_arg);
+	if (error)
+		return error;
+	info->fmv->fmv_entries++;
+
+out:
+	rec_daddr = XFS_FSB_TO_DADDR(mp, fsb + rec->rm_blockcount);
+	if (info->next_daddr < rec_daddr)
+		info->next_daddr = rec_daddr;
+	return XFS_BTREE_QUERY_RANGE_CONTINUE;
+}
+
+/* Do we recognize the device? */
+STATIC bool
+xfs_getfsmap_is_valid_device(
+	struct xfs_mount	*mp,
+	struct getfsmapx	*fmv)
+{
+	return fmv->fmv_device == 0 || fmv->fmv_device == UINT_MAX ||
+	       fmv->fmv_device == new_encode_dev(mp->m_ddev_targp->bt_dev);
+}
+
+/*
+ * Get filesystem's extents as described in fmv, and format for
+ * output.  Calls formatter to fill the user's buffer until all
+ * extents are mapped, until the passed-in fmv->fmv_count slots have
+ * been filled, or until the formatter short-circuits the loop, if it
+ * is tracking filled-in extents on its own.
+ */
+int
+xfs_getfsmap(
+	struct xfs_mount	*mp,
+	struct getfsmapx	*fmv,
+	xfs_fsmap_format_t	formatter,
+	void			*arg)
+{
+	struct xfs_getfsmap_info	info;
+	struct xfs_buf		*agbp = NULL;
+	struct xfs_btree_cur	*bt_cur = NULL;
+	struct getfsmapx	*fmv_low;
+	struct getfsmapx	*fmv_high;
+	struct xfs_rmap_irec	high;
+	xfs_fsblock_t		start_fsb;
+	xfs_fsblock_t		end_fsb;
+	xfs_agnumber_t		end_ag;
+	xfs_agnumber_t		agno;
+	xfs_daddr_t		eofs;
+	xfs_extlen_t		extlen;
+	int			error = 0;
+
+	if (!xfs_sb_version_hasrmapbt(&mp->m_sb))
+		return -EOPNOTSUPP;
+	if (fmv->fmv_count < 2)
+		return -EINVAL;
+	if (fmv->fmv_iflags & (~FMV_IF_VALID))
+		return -EINVAL;
+	fmv_low = fmv;
+	fmv_high = fmv + 1;
+	if (!xfs_getfsmap_is_valid_device(mp, fmv) ||
+	    !xfs_getfsmap_is_valid_device(mp, fmv_high) ||
+	    fmv_high->fmv_iflags || fmv_high->fmv_count ||
+	    fmv_high->fmv_length || fmv_high->fmv_entries ||
+	    fmv_high->fmv_unused1 || fmv->fmv_unused1 ||
+	    fmv_high->fmv_unused2 || fmv->fmv_unused2)
+		return -EINVAL;
+
+	fmv->fmv_entries = 0;
+	eofs = XFS_FSB_TO_BB(mp, mp->m_sb.sb_dblocks);
+	if (fmv->fmv_block >= eofs)
+		return 0;
+	if (fmv_high->fmv_block >= eofs)
+		fmv_high->fmv_block = eofs - 1;
+	start_fsb = XFS_DADDR_TO_FSB(mp, fmv->fmv_block);
+	end_fsb = XFS_DADDR_TO_FSB(mp, fmv_high->fmv_block);
+
+	/* Set up search keys */
+	info.low.rm_startblock = XFS_FSB_TO_AGBNO(mp, start_fsb);
+	info.low.rm_offset = XFS_DADDR_TO_FSB(mp, fmv->fmv_offset);
+	info.low.rm_owner = fmv->fmv_owner;
+	info.low.rm_blockcount = 0;
+	extlen = XFS_DADDR_TO_FSB(mp, fmv->fmv_length);
+	if (fmv->fmv_oflags & (FMV_OF_SPECIAL_OWNER | FMV_OF_EXTENT_MAP)) {
+		info.low.rm_startblock += extlen;
+		info.low.rm_owner = 0;
+		info.low.rm_offset = 0;
+	} else
+		info.low.rm_offset += extlen;
+	if (fmv->fmv_oflags & FMV_OF_ATTR_FORK)
+		info.low.rm_flags |= XFS_RMAP_ATTR_FORK;
+	if (fmv->fmv_oflags & FMV_OF_EXTENT_MAP)
+		info.low.rm_flags |= XFS_RMAP_BMBT_BLOCK;
+	if (fmv->fmv_oflags & FMV_OF_PREALLOC)
+		info.low.rm_flags |= XFS_RMAP_UNWRITTEN;
+
+	high.rm_startblock = -1U;
+	high.rm_owner = ULLONG_MAX;
+	high.rm_offset = ULLONG_MAX;
+	high.rm_blockcount = 0;
+	high.rm_flags = XFS_RMAP_ATTR_FORK | XFS_RMAP_BMBT_BLOCK |
+			XFS_RMAP_UNWRITTEN;
+	info.fmv = fmv;
+	info.formatter = formatter;
+	info.format_arg = arg;
+	info.last = false;
+
+	info.start_ag = XFS_FSB_TO_AGNO(mp, start_fsb);
+	end_ag = XFS_FSB_TO_AGNO(mp, end_fsb);
+	info.next_daddr = XFS_FSB_TO_DADDR(mp, XFS_AGB_TO_FSB(mp, info.start_ag,
+			info.low.rm_startblock));
+
+	/* Query each AG */
+	for (agno = info.start_ag; agno <= end_ag; agno++) {
+		if (agno == end_ag) {
+			high.rm_startblock = XFS_FSB_TO_AGBNO(mp, end_fsb);
+			high.rm_offset = XFS_DADDR_TO_FSB(mp,
+					fmv_high->fmv_offset);
+			high.rm_owner = fmv_high->fmv_owner;
+			if (fmv_high->fmv_oflags & FMV_OF_ATTR_FORK)
+				high.rm_flags |= XFS_RMAP_ATTR_FORK;
+			if (fmv_high->fmv_oflags & FMV_OF_EXTENT_MAP)
+				high.rm_flags |= XFS_RMAP_BMBT_BLOCK;
+			if (fmv_high->fmv_oflags & FMV_OF_PREALLOC)
+				high.rm_flags |= XFS_RMAP_UNWRITTEN;
+		}
+
+		if (bt_cur) {
+			xfs_btree_del_cursor(bt_cur, XFS_BTREE_NOERROR);
+			xfs_trans_brelse(NULL, agbp);
+			bt_cur = NULL;
+			agbp = NULL;
+		}
+
+		error = xfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
+		if (error)
+			goto err;
+
+		trace_xfs_fsmap_low_key(mp, agno, info.low.rm_startblock,
+				info.low.rm_blockcount, info.low.rm_owner,
+				info.low.rm_offset);
+
+		trace_xfs_fsmap_high_key(mp, agno, high.rm_startblock,
+				high.rm_blockcount, high.rm_owner,
+				high.rm_offset);
+
+		bt_cur = xfs_rmapbt_init_cursor(mp, NULL, agbp, agno);
+		error = xfs_rmapbt_query_range(bt_cur, &info.low, &high,
+				xfs_getfsmap_helper, &info);
+		if (error)
+			goto err;
+
+		if (agno == info.start_ag) {
+			info.low.rm_startblock = 0;
+			info.low.rm_owner = 0;
+			info.low.rm_offset = 0;
+			info.low.rm_flags = 0;
+		}
+	}
+
+	/* Report any free space at the end of the AG */
+	info.last = true;
+	error = xfs_getfsmap_helper(bt_cur, &high, &info);
+	if (error)
+		goto err;
+
+err:
+	if (bt_cur)
+		xfs_btree_del_cursor(bt_cur, error < 0 ? XFS_BTREE_ERROR :
+							 XFS_BTREE_NOERROR);
+	if (agbp)
+		xfs_trans_brelse(NULL, agbp);
+
+	return error;
 }
