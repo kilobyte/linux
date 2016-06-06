@@ -261,6 +261,7 @@ xfs_mount_validate_sb(
 	/*
 	 * Until this is fixed only page-sized or smaller data blocks work.
 	 */
+#ifdef __KERNEL__
 	if (unlikely(sbp->sb_blocksize > PAGE_SIZE)) {
 		xfs_warn(mp,
 		"File system with blocksize %d bytes. "
@@ -268,6 +269,7 @@ xfs_mount_validate_sb(
 				sbp->sb_blocksize, PAGE_SIZE);
 		return -ENOSYS;
 	}
+#endif
 
 	/*
 	 * Currently only very few inode sizes are supported.
@@ -291,10 +293,12 @@ xfs_mount_validate_sb(
 		return -EFBIG;
 	}
 
+#ifdef __KERNEL__
 	if (check_inprogress && sbp->sb_inprogress) {
 		xfs_warn(mp, "Offline file system operation in progress!");
 		return -EFSCORRUPTED;
 	}
+#endif
 	return 0;
 }
 

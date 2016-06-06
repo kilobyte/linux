@@ -2415,7 +2415,9 @@ xfs_alloc_read_agf(
 			be32_to_cpu(agf->agf_levels[XFS_BTNUM_CNTi]);
 		spin_lock_init(&pag->pagb_lock);
 		pag->pagb_count = 0;
+#ifdef __KERNEL__
 		pag->pagb_tree = RB_ROOT;
+#endif
 		pag->pagf_init = 1;
 	}
 #ifdef DEBUG

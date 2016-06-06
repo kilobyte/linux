@@ -2532,6 +2532,7 @@ error0:
 	return error;
 }
 
+#ifdef __KERNEL__
 struct xfs_btree_split_args {
 	struct xfs_btree_cur	*cur;
 	int			level;
@@ -2609,6 +2610,9 @@ xfs_btree_split(
 	destroy_work_on_stack(&args.work);
 	return args.result;
 }
+#else /* !KERNEL */
+#define xfs_btree_split	__xfs_btree_split
+#endif
 
 
 /*
