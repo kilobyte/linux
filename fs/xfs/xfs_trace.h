@@ -2549,6 +2549,8 @@ DEFINE_RMAPBT_EVENT(xfs_rmapbt_delete);
 DEFINE_AG_ERROR_EVENT(xfs_rmapbt_insert_error);
 DEFINE_AG_ERROR_EVENT(xfs_rmapbt_delete_error);
 DEFINE_AG_ERROR_EVENT(xfs_rmapbt_update_error);
+DEFINE_RMAPBT_EVENT(xfs_rmap_lookup_le_range_result);
+DEFINE_RMAPBT_EVENT(xfs_rmap_map_gtrec);
 
 #endif /* _TRACE_XFS_H */
 
