@@ -2509,6 +2509,13 @@ DEFINE_RMAP_EVENT(xfs_rmap_convert_done);
 DEFINE_AG_ERROR_EVENT(xfs_rmap_convert_error);
 DEFINE_AG_ERROR_EVENT(xfs_rmap_convert_state);
 
+DEFINE_RMAP_EVENT(xfs_rmap_unmap);
+DEFINE_RMAP_EVENT(xfs_rmap_unmap_done);
+DEFINE_AG_ERROR_EVENT(xfs_rmap_unmap_error);
+DEFINE_RMAP_EVENT(xfs_rmap_map);
+DEFINE_RMAP_EVENT(xfs_rmap_map_done);
+DEFINE_AG_ERROR_EVENT(xfs_rmap_map_error);
+
 DECLARE_EVENT_CLASS(xfs_rmapbt_class,
 	TP_PROTO(struct xfs_mount *mp, xfs_agnumber_t agno,
 		 xfs_agblock_t agbno, xfs_extlen_t len,
@@ -2560,10 +2567,15 @@ DEFINE_RMAPBT_EVENT(xfs_rmapbt_delete);
 DEFINE_AG_ERROR_EVENT(xfs_rmapbt_insert_error);
 DEFINE_AG_ERROR_EVENT(xfs_rmapbt_delete_error);
 DEFINE_AG_ERROR_EVENT(xfs_rmapbt_update_error);
+
+DEFINE_RMAPBT_EVENT(xfs_rmap_find_left_neighbor_candidate);
+DEFINE_RMAPBT_EVENT(xfs_rmap_find_left_neighbor_result);
+DEFINE_RMAPBT_EVENT(xfs_rmap_find_left_neighbor_query);
+DEFINE_RMAPBT_EVENT(xfs_rmap_lookup_le_range_candidate);
 DEFINE_RMAPBT_EVENT(xfs_rmap_lookup_le_range_result);
+DEFINE_RMAPBT_EVENT(xfs_rmap_lookup_le_range);
 DEFINE_RMAPBT_EVENT(xfs_rmap_map_gtrec);
 DEFINE_RMAPBT_EVENT(xfs_rmap_convert_gtrec);
-DEFINE_RMAPBT_EVENT(xfs_rmap_find_left_neighbor_result);
 
 /* deferred bmbt updates */
 #define DEFINE_BMAP_DEFERRED_EVENT	DEFINE_RMAP_DEFERRED_EVENT
