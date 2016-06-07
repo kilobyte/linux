@@ -2497,6 +2497,10 @@ DEFINE_RMAP_EVENT(xfs_rmap_free_extent_error);
 DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent);
 DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent_done);
 DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent_error);
+DEFINE_RMAP_EVENT(xfs_rmap_convert);
+DEFINE_RMAP_EVENT(xfs_rmap_convert_done);
+DEFINE_AG_ERROR_EVENT(xfs_rmap_convert_error);
+DEFINE_AG_ERROR_EVENT(xfs_rmap_convert_state);
 
 DECLARE_EVENT_CLASS(xfs_rmapbt_class,
 	TP_PROTO(struct xfs_mount *mp, xfs_agnumber_t agno,
@@ -2551,6 +2555,8 @@ DEFINE_AG_ERROR_EVENT(xfs_rmapbt_delete_error);
 DEFINE_AG_ERROR_EVENT(xfs_rmapbt_update_error);
 DEFINE_RMAPBT_EVENT(xfs_rmap_lookup_le_range_result);
 DEFINE_RMAPBT_EVENT(xfs_rmap_map_gtrec);
+DEFINE_RMAPBT_EVENT(xfs_rmap_convert_gtrec);
+DEFINE_RMAPBT_EVENT(xfs_rmap_find_left_neighbor_result);
 
 #endif /* _TRACE_XFS_H */
 
