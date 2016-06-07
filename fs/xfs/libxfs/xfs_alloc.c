@@ -2924,3 +2924,36 @@ err:
 	xfs_trans_brelse(tp, agbp);
 	return error;
 }
+
+/* Is there a record covering a given extent? */
+int
+xfs_alloc_record_exists(
+	struct xfs_btree_cur	*cur,
+	xfs_agblock_t		bno,
+	xfs_extlen_t		len,
+	bool			*is_freesp)
+{
+	int			stat;
+	xfs_agblock_t		fbno;
+	xfs_extlen_t		flen;
+	int			error;
+
+	error = xfs_alloc_lookup_le(cur, bno, len, &stat);
+	if (error)
+		return error;
+	if (!stat) {
+		*is_freesp = false;
+		return 0;
+	}
+
+	error = xfs_alloc_get_rec(cur, &fbno, &flen, &stat);
+	if (error)
+		return error;
+	if (!stat) {
+		*is_freesp = false;
+		return 0;
+	}
+
+	*is_freesp = (fbno <= bno && fbno + flen >= bno + len);
+	return 0;
+}

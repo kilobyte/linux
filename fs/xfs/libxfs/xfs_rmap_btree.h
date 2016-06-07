@@ -144,4 +144,7 @@ extern xfs_extlen_t xfs_rmapbt_max_size(struct xfs_mount *mp);
 extern int xfs_rmapbt_calc_reserves(struct xfs_mount *mp,
 		xfs_agnumber_t agno, xfs_extlen_t *ask, xfs_extlen_t *used);
 
+extern int xfs_rmap_record_exists(struct xfs_btree_cur *cur, xfs_agblock_t bno,
+		xfs_extlen_t len, struct xfs_owner_info *oinfo, bool *has_rmap);
+
 #endif	/* __XFS_RMAP_BTREE_H__ */

@@ -58,6 +58,7 @@ xfs-y				+= $(addprefix libxfs/, \
 				   xfs_refcount.o \
 				   xfs_refcount_btree.o \
 				   xfs_sb.o \
+				   xfs_scrub.o \
 				   xfs_symlink_remote.o \
 				   xfs_trans_resv.o \
 				   )
