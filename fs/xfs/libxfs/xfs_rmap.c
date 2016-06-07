@@ -1123,10 +1123,52 @@ done:
 	return error;
 }
 
+/*
+ * Convert an unwritten extent to a real extent or vice versa.
+ */
+STATIC int
+xfs_rmap_convert(
+	struct xfs_btree_cur	*cur,
+	xfs_agblock_t		bno,
+	xfs_extlen_t		len,
+	bool			unwritten,
+	struct xfs_owner_info	*oinfo)
+{
+	return __xfs_rmap_convert(cur, bno, len, unwritten, oinfo);
+}
+
 #undef	NEW
 #undef	LEFT
 #undef	RIGHT
 #undef	PREV
+
+/*
+ * Find an extent in the rmap btree and unmap it.
+ */
+STATIC int
+xfs_rmap_unmap(
+	struct xfs_btree_cur	*cur,
+	xfs_agblock_t		bno,
+	xfs_extlen_t		len,
+	bool			unwritten,
+	struct xfs_owner_info	*oinfo)
+{
+	return __xfs_rmap_free(cur, bno, len, unwritten, oinfo);
+}
+
+/*
+ * Find an extent in the rmap btree and map it.
+ */
+STATIC int
+xfs_rmap_map(
+	struct xfs_btree_cur	*cur,
+	xfs_agblock_t		bno,
+	xfs_extlen_t		len,
+	bool			unwritten,
+	struct xfs_owner_info	*oinfo)
+{
+	return __xfs_rmap_alloc(cur, bno, len, unwritten, oinfo);
+}
 
 struct xfs_rmapbt_query_range_info {
 	xfs_rmapbt_query_range_fn	fn;
