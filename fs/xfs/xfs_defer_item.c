@@ -213,7 +213,8 @@ xfs_rmap_update_finish_item(
 			rmap->ri_bmap.br_startoff,
 			rmap->ri_bmap.br_startblock,
 			rmap->ri_bmap.br_blockcount,
-			rmap->ri_bmap.br_state);
+			rmap->ri_bmap.br_state,
+			(struct xfs_btree_cur **)state);
 	kmem_free(rmap);
 	return error;
 }
@@ -225,6 +226,9 @@ xfs_rmap_update_finish_cleanup(
 	void			*state,
 	int			error)
 {
+	struct xfs_btree_cur	*rcur = state;
+
+	xfs_rmap_finish_one_cleanup(tp, rcur, error);
 }
 
 /* Abort all pending RUIs. */
