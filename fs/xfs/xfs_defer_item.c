@@ -28,6 +28,7 @@
 #include "xfs_mount.h"
 #include "xfs_defer.h"
 #include "xfs_trans.h"
+#include "xfs_trace.h"
 
 /* Initialize the deferred operation types. */
 void
