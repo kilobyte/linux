@@ -47,6 +47,7 @@
 #include "xfs_rmap_item.h"
 #include "xfs_rmap_btree.h"
 #include "xfs_refcount_item.h"
+#include "xfs_refcount.h"
 
 #define BLK_AVG(blk1, blk2)	((blk1+blk2) >> 1)
 
@@ -4833,6 +4834,15 @@ xlog_recover_process_cui(
 	struct xfs_phys_extent		*refc;
 	xfs_fsblock_t			startblock_fsb;
 	bool				op_ok;
+	struct xfs_cud_log_item		*cudp;
+	struct xfs_trans		*tp;
+	struct xfs_btree_cur		*rcur = NULL;
+	enum xfs_refcount_intent_type	type;
+	xfs_fsblock_t			firstfsb;
+	xfs_extlen_t			adjusted;
+	struct xfs_bmbt_irec		irec;
+	struct xfs_defer_ops		dfops;
+	bool				requeue_only = false;
 
 	ASSERT(!test_bit(XFS_CUI_RECOVERED, &cuip->cui_flags));
 
@@ -4871,9 +4881,74 @@ xlog_recover_process_cui(
 		}
 	}
 
-	/* XXX: do nothing for now */
+	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_itruncate, 0, 0, 0, &tp);
+	if (error)
+		return error;
+	cudp = xfs_trans_get_cud(tp, cuip, cuip->cui_format.cui_nextents);
+
+	xfs_defer_init(&dfops, &firstfsb);
+	for (i = 0; i < cuip->cui_format.cui_nextents; i++) {
+		refc = &(cuip->cui_format.cui_extents[i]);
+		switch (refc->pe_flags & XFS_REFCOUNT_EXTENT_TYPE_MASK) {
+		case XFS_REFCOUNT_EXTENT_INCREASE:
+			type = XFS_REFCOUNT_INCREASE;
+			break;
+		case XFS_REFCOUNT_EXTENT_DECREASE:
+			type = XFS_REFCOUNT_DECREASE;
+			break;
+		case XFS_REFCOUNT_EXTENT_ALLOC_COW:
+			type = XFS_REFCOUNT_ALLOC_COW;
+			break;
+		case XFS_REFCOUNT_EXTENT_FREE_COW:
+			type = XFS_REFCOUNT_FREE_COW;
+			break;
+		default:
+			error = -EFSCORRUPTED;
+			goto abort_error;
+		}
+		if (requeue_only)
+			adjusted = 0;
+		else
+			error = xfs_trans_log_finish_refcount_update(tp, cudp,
+				&dfops, type, refc->pe_startblock, refc->pe_len,
+				&adjusted, &rcur);
+		if (error)
+			goto abort_error;
+
+		/* Requeue what we didn't finish. */
+		if (adjusted < refc->pe_len) {
+			irec.br_startblock = refc->pe_startblock + adjusted;
+			irec.br_blockcount = refc->pe_len - adjusted;
+			switch (type) {
+			case XFS_REFCOUNT_INCREASE:
+				error = xfs_refcount_increase_extent(
+						tp->t_mountp, &dfops, &irec);
+				break;
+			case XFS_REFCOUNT_DECREASE:
+				error = xfs_refcount_decrease_extent(
+						tp->t_mountp, &dfops, &irec);
+				break;
+			default:
+				ASSERT(0);
+			}
+			if (error)
+				goto abort_error;
+			requeue_only = true;
+		}
+	}
+
+	xfs_refcount_finish_one_cleanup(tp, rcur, error);
+	error = xfs_defer_finish(&tp, &dfops, NULL);
+	if (error)
+		goto abort_error;
 	set_bit(XFS_CUI_RECOVERED, &cuip->cui_flags);
-	xfs_cui_release(cuip);
+	error = xfs_trans_commit(tp);
+	return error;
+
+abort_error:
+	xfs_refcount_finish_one_cleanup(tp, rcur, error);
+	xfs_defer_cancel(&dfops);
+	xfs_trans_cancel(tp);
 	return error;
 }
 

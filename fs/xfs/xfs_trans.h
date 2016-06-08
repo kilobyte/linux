@@ -33,6 +33,7 @@ struct xfs_trans;
 struct xfs_trans_res;
 struct xfs_dquot_acct;
 struct xfs_busy_extent;
+struct xfs_defer_ops;
 
 typedef struct xfs_log_item {
 	struct list_head		li_ail;		/* AIL pointers */
@@ -264,8 +265,9 @@ void xfs_trans_log_start_refcount_update(struct xfs_trans *tp,
 struct xfs_cud_log_item *xfs_trans_get_cud(struct xfs_trans *tp,
 		struct xfs_cui_log_item *cuip, uint nextents);
 int xfs_trans_log_finish_refcount_update(struct xfs_trans *tp,
-		struct xfs_cud_log_item *cudp,
+		struct xfs_cud_log_item *cudp, struct xfs_defer_ops *dfops,
 		enum xfs_refcount_intent_type type, xfs_fsblock_t startblock,
-		xfs_extlen_t blockcount, struct xfs_btree_cur **pcur);
+		xfs_extlen_t blockcount, xfs_extlen_t *adjusted,
+		struct xfs_btree_cur **pcur);
 
 #endif	/* __XFS_TRANS_H__ */

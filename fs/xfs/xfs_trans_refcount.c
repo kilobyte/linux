@@ -142,17 +142,19 @@ int
 xfs_trans_log_finish_refcount_update(
 	struct xfs_trans		*tp,
 	struct xfs_cud_log_item		*cudp,
+	struct xfs_defer_ops		*dop,
 	enum xfs_refcount_intent_type	type,
 	xfs_fsblock_t			startblock,
 	xfs_extlen_t			blockcount,
+	xfs_extlen_t			*adjusted,
 	struct xfs_btree_cur		**pcur)
 {
 	uint				next_extent;
 	struct xfs_phys_extent		*refc;
 	int				error;
 
-	/* XXX: leave this empty for now */
-	error = -EFSCORRUPTED;
+	error = xfs_refcount_finish_one(tp, dop, type, startblock,
+			blockcount, adjusted, pcur);
 
 	/*
 	 * Mark the transaction dirty, even on error. This ensures the
@@ -187,6 +189,10 @@ xfs_trans_log_finish_refcount_update(
 		ASSERT(0);
 	}
 	cudp->cud_next_extent++;
+	if (!error && *adjusted != blockcount) {
+		refc->pe_len = *adjusted;
+		cudp->cud_format.cud_nextents = cudp->cud_next_extent;
+	}
 
 	return error;
 }
