@@ -44,6 +44,7 @@
 #include "xfs_sysfs.h"
 #include "xfs_rmap_btree.h"
 #include "xfs_refcount_btree.h"
+#include "xfs_reflink.h"
 
 
 static DEFINE_MUTEX(xfs_uuid_table_mutex);
@@ -960,6 +961,12 @@ xfs_mountfs(
 		if (error)
 			xfs_warn(mp,
 	"Unable to allocate reserve blocks. Continuing without reserve pool.");
+
+		/* Recover any CoW blocks that never got remapped. */
+		error = xfs_reflink_recover_cow(mp);
+		if (error && !XFS_FORCED_SHUTDOWN(mp))
+			xfs_err(mp,
+	"Error %d recovering leftover CoW allocations.", error);
 	}
 
 	return 0;

@@ -1306,6 +1306,12 @@ xfs_fs_remount(
 		 */
 		xfs_restore_resvblks(mp);
 		xfs_log_work_queue(mp);
+
+		/* Recover any CoW blocks that never got remapped. */
+		error = xfs_reflink_recover_cow(mp);
+		if (error && !XFS_FORCED_SHUTDOWN(mp))
+			xfs_err(mp,
+	"Error %d recovering leftover CoW allocations.", error);
 	}
 
 	/* rw -> ro */

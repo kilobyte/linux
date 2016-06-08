@@ -534,6 +534,13 @@ xfs_reflink_cancel_cow_blocks(
 			xfs_trans_ijoin(*tpp, ip, 0);
 			xfs_defer_init(&dfops, &firstfsb);
 
+			/* Free the CoW orphan record. */
+			error = xfs_refcount_free_cow_extent(ip->i_mount,
+					&dfops, irec.br_startblock,
+					irec.br_blockcount);
+			if (error)
+				break;
+
 			xfs_bmap_add_free(ip->i_mount, &dfops,
 					irec.br_startblock, irec.br_blockcount,
 					NULL);
@@ -694,6 +701,13 @@ xfs_reflink_end_cow(
 			irec.br_blockcount = rlen;
 			trace_xfs_reflink_cow_remap_piece(ip, &uirec);
 
+			/* Free the CoW orphan record. */
+			error = xfs_refcount_free_cow_extent(tp->t_mountp,
+					&dfops, uirec.br_startblock,
+					uirec.br_blockcount);
+			if (error)
+				goto out_defer;
+
 			/* Map the new blocks into the data fork. */
 			error = xfs_bmap_map_extent(tp->t_mountp, &dfops,
 					ip, XFS_DATA_FORK, &uirec);
@@ -729,5 +743,135 @@ out_cancel:
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 out:
 	trace_xfs_reflink_end_cow_error(ip, error, _RET_IP_);
+	return error;
+}
+
+struct xfs_reflink_recovery {
+	struct list_head		rr_list;
+	struct xfs_refcount_irec	rr_rrec;
+};
+
+/*
+ * Find and remove leftover CoW reservations.
+ */
+STATIC int
+xfs_reflink_recover_cow_ag(
+	struct xfs_mount		*mp,
+	xfs_agnumber_t			agno)
+{
+	struct list_head		debris;
+	struct xfs_trans		*tp;
+	struct xfs_btree_cur		*cur;
+	struct xfs_buf			*agbp;
+	struct xfs_refcount_irec	tmp;
+	struct xfs_reflink_recovery	*rr, *n;
+	struct xfs_defer_ops		dfops;
+	xfs_fsblock_t			fsb;
+	int				i, have;
+	int				error;
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
+	if (error)
+		return error;
+	cur = xfs_refcountbt_init_cursor(mp, NULL, agbp, agno, NULL);
+
+	/* Start iterating btree entries. */
+	INIT_LIST_HEAD(&debris);
+	error = xfs_refcountbt_lookup_ge(cur, 0, &have);
+	if (error)
+		goto out_error;
+	while (have) {
+		/* If refcount == 1, save the stashed entry for later. */
+		error = xfs_refcountbt_get_rec(cur, &tmp, &i);
+		if (error)
+			goto out_error;
+		XFS_WANT_CORRUPTED_GOTO(mp, i == 1, out_error);
+		if (tmp.rc_refcount != 1)
+			goto advloop;
+
+		rr = kmem_alloc(sizeof(struct xfs_reflink_recovery), KM_SLEEP);
+		rr->rr_rrec = tmp;
+		list_add_tail(&rr->rr_list, &debris);
+
+advloop:
+		/* Look at the next one */
+		error = xfs_btree_increment(cur, 0, &have);
+		if (error)
+			goto out_error;
+	}
+
+	xfs_btree_del_cursor(cur, XFS_BTREE_NOERROR);
+	xfs_buf_relse(agbp);
+
+	/* Now iterate the list to free the leftovers */
+	list_for_each_entry(rr, &debris, rr_list) {
+		/* Set up transaction. */
+		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, 0, 0, 0, &tp);
+		if (error)
+			goto out_free;
+
+		trace_xfs_reflink_recover_extent(mp, agno, &rr->rr_rrec);
+
+		/* Free the orphan record */
+		xfs_defer_init(&dfops, &fsb);
+		fsb = XFS_AGB_TO_FSB(mp, agno, rr->rr_rrec.rc_startblock);
+		error = xfs_refcount_free_cow_extent(mp, &dfops, fsb,
+				rr->rr_rrec.rc_blockcount);
+		if (error)
+			goto out_defer;
+
+		/* Free the block. */
+		xfs_bmap_add_free(mp, &dfops, fsb,
+				rr->rr_rrec.rc_blockcount, NULL);
+
+		error = xfs_defer_finish(&tp, &dfops, NULL);
+		if (error)
+			goto out_defer;
+
+		error = xfs_trans_commit(tp);
+		if (error)
+			goto out_cancel;
+	}
+	goto out_free;
+
+out_defer:
+	xfs_defer_cancel(&dfops);
+out_cancel:
+	xfs_trans_cancel(tp);
+
+out_free:
+	/* Free the leftover list */
+	list_for_each_entry_safe(rr, n, &debris, rr_list) {
+		list_del(&rr->rr_list);
+		kmem_free(rr);
+	}
+
+	return error;
+
+out_error:
+	xfs_btree_del_cursor(cur, XFS_BTREE_ERROR);
+	xfs_buf_relse(agbp);
+	return error;
+}
+
+/*
+ * Free leftover CoW reservations that didn't get cleaned out.
+ */
+int
+xfs_reflink_recover_cow(
+	struct xfs_mount	*mp)
+{
+	xfs_agnumber_t		agno;
+	int			error = 0;
+
+	if (!xfs_sb_version_hasreflink(&mp->m_sb))
+		return 0;
+
+	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
+		error = xfs_reflink_recover_cow_ag(mp, agno);
+		if (error)
+			break;
+	}
+
 	return error;
 }

@@ -57,4 +57,11 @@ extern int xfs_refcount_find_shared(struct xfs_mount *mp, xfs_agnumber_t agno,
 		xfs_agblock_t agbno, xfs_extlen_t aglen, xfs_agblock_t *fbno,
 		xfs_extlen_t *flen, bool find_maximal);
 
+extern int xfs_refcount_alloc_cow_extent(struct xfs_mount *mp,
+		struct xfs_defer_ops *dfops, xfs_fsblock_t fsb,
+		xfs_extlen_t len);
+extern int xfs_refcount_free_cow_extent(struct xfs_mount *mp,
+		struct xfs_defer_ops *dfops, xfs_fsblock_t fsb,
+		xfs_extlen_t len);
+
 #endif	/* __XFS_REFCOUNT_H__ */

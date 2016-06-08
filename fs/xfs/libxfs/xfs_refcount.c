@@ -36,12 +36,22 @@
 #include "xfs_trans.h"
 #include "xfs_bit.h"
 #include "xfs_refcount.h"
+#include "xfs_rmap_btree.h"
 
 /* Allowable refcount adjustment amounts. */
 enum xfs_refc_adjust_op {
 	XFS_REFCOUNT_ADJUST_INCREASE	= 1,
 	XFS_REFCOUNT_ADJUST_DECREASE	= -1,
+	XFS_REFCOUNT_ADJUST_COW_ALLOC	= 0,
+	XFS_REFCOUNT_ADJUST_COW_FREE	= -1,
 };
+
+STATIC int __xfs_refcount_cow_alloc(struct xfs_btree_cur *rcur,
+		xfs_agblock_t agbno, xfs_extlen_t aglen,
+		struct xfs_defer_ops *dfops);
+STATIC int __xfs_refcount_cow_free(struct xfs_btree_cur *rcur,
+		xfs_agblock_t agbno, xfs_extlen_t aglen,
+		struct xfs_defer_ops *dfops);
 
 /*
  * Look up the first record less than or equal to [bno, len] in the btree
@@ -468,6 +478,8 @@ out_error:
 	return error;
 }
 
+#define XFS_FIND_RCEXT_SHARED	1
+#define XFS_FIND_RCEXT_COW	2
 /*
  * Find the left extent and the one after it (cleft).  This function assumes
  * that we've already split any extent crossing agbno.
@@ -478,7 +490,8 @@ xfs_refcount_find_left_extents(
 	struct xfs_refcount_irec	*left,
 	struct xfs_refcount_irec	*cleft,
 	xfs_agblock_t			agbno,
-	xfs_extlen_t			aglen)
+	xfs_extlen_t			aglen,
+	int				flags)
 {
 	struct xfs_refcount_irec	tmp;
 	int				error;
@@ -497,6 +510,10 @@ xfs_refcount_find_left_extents(
 	XFS_WANT_CORRUPTED_GOTO(cur->bc_mp, found_rec == 1, out_error);
 
 	if (RCNEXT(tmp) != agbno)
+		return 0;
+	if ((flags & XFS_FIND_RCEXT_SHARED) && tmp.rc_refcount < 2)
+		return 0;
+	if ((flags & XFS_FIND_RCEXT_COW) && tmp.rc_refcount > 1)
 		return 0;
 	/* We have a left extent; retrieve (or invent) the next right one */
 	*left = tmp;
@@ -554,7 +571,8 @@ xfs_refcount_find_right_extents(
 	struct xfs_refcount_irec	*right,
 	struct xfs_refcount_irec	*cright,
 	xfs_agblock_t			agbno,
-	xfs_extlen_t			aglen)
+	xfs_extlen_t			aglen,
+	int				flags)
 {
 	struct xfs_refcount_irec	tmp;
 	int				error;
@@ -573,6 +591,10 @@ xfs_refcount_find_right_extents(
 	XFS_WANT_CORRUPTED_GOTO(cur->bc_mp, found_rec == 1, out_error);
 
 	if (tmp.rc_startblock != agbno + aglen)
+		return 0;
+	if ((flags & XFS_FIND_RCEXT_SHARED) && tmp.rc_refcount < 2)
+		return 0;
+	if ((flags & XFS_FIND_RCEXT_COW) && tmp.rc_refcount > 1)
 		return 0;
 	/* We have a right extent; retrieve (or invent) the next left one */
 	*right = tmp;
@@ -630,6 +652,7 @@ xfs_refcount_merge_extents(
 	xfs_agblock_t		*agbno,
 	xfs_extlen_t		*aglen,
 	enum xfs_refc_adjust_op adjust,
+	int			flags,
 	bool			*shape_changed)
 {
 	struct xfs_refcount_irec	left = {0}, cleft = {0};
@@ -645,11 +668,11 @@ xfs_refcount_merge_extents(
 	 * [right].
 	 */
 	error = xfs_refcount_find_left_extents(cur, &left, &cleft, *agbno,
-			*aglen);
+			*aglen, flags);
 	if (error)
 		return error;
 	error = xfs_refcount_find_right_extents(cur, &right, &cright, *agbno,
-			*aglen);
+			*aglen, flags);
 	if (error)
 		return error;
 
@@ -936,7 +959,7 @@ xfs_refcount_adjust(
 	 */
 	orig_aglen = aglen;
 	error = xfs_refcount_merge_extents(cur, &agbno, &aglen, adj,
-			&shape_changed);
+			XFS_FIND_RCEXT_SHARED, &shape_changed);
 	if (error)
 		goto out_error;
 	if (shape_changed)
@@ -1052,6 +1075,18 @@ xfs_refcount_finish_one(
 	case XFS_REFCOUNT_DECREASE:
 		error = xfs_refcount_adjust(rcur, bno, blockcount, adjusted,
 			XFS_REFCOUNT_ADJUST_DECREASE, dfops, NULL);
+		break;
+	case XFS_REFCOUNT_ALLOC_COW:
+		*adjusted = 0;
+		error = __xfs_refcount_cow_alloc(rcur, bno, blockcount, dfops);
+		if (!error)
+			*adjusted = blockcount;
+		break;
+	case XFS_REFCOUNT_FREE_COW:
+		*adjusted = 0;
+		error = __xfs_refcount_cow_free(rcur, bno, blockcount, dfops);
+		if (!error)
+			*adjusted = blockcount;
 		break;
 	default:
 		ASSERT(0);
@@ -1237,4 +1272,280 @@ out:
 	if (error)
 		trace_xfs_refcount_find_shared_error(mp, agno, error, _RET_IP_);
 	return error;
+}
+
+/*
+ * Recovering CoW Blocks After a Crash
+ *
+ * Due to the way that the copy on write mechanism works, there's a window of
+ * opportunity in which we can lose track of allocated blocks during a crash.
+ * Because CoW uses delayed allocation in the in-core CoW fork, writeback
+ * causes blocks to be allocated and stored in the CoW fork.  The blocks are
+ * no longer in the free space btree but are not otherwise recorded anywhere
+ * until the write completes and the blocks are mapped into the file.  A crash
+ * in between allocation and remapping results in the replacement blocks being
+ * lost.  This situation is exacerbated by the CoW extent size hint because
+ * allocations can hang around for long time.
+ *
+ * However, there is a place where we can record these allocations before they
+ * become mappings -- the reference count btree.  The btree does not record
+ * extents with refcount == 1, so we can record allocations with a refcount of
+ * 1.  Blocks being used for CoW writeout cannot be shared, so there should be
+ * no conflict with shared block records.  These mappings should be created
+ * when we allocate blocks to the CoW fork and deleted when they're removed
+ * from the CoW fork.
+ *
+ * Minor nit: records for in-progress CoW allocations and records for shared
+ * extents must never be merged, to preserve the property that (except for CoW
+ * allocations) there are no refcount btree entries with refcount == 1.  The
+ * only time this could potentially happen is when unsharing a block that's
+ * adjacent to CoW allocations, so we must be careful to avoid this.
+ *
+ * At mount time we recover lost CoW allocations by searching the refcount
+ * btree for these refcount == 1 mappings.  These represent CoW allocations
+ * that were in progress at the time the filesystem went down, so we can free
+ * them to get the space back.
+ *
+ * This mechanism is superior to creating EFIs for unmapped CoW extents for
+ * several reasons -- first, EFIs pin the tail of the log and would have to be
+ * periodically relogged to avoid filling up the log.  Second, CoW completions
+ * will have to file an EFD and create new EFIs for whatever remains in the
+ * CoW fork; this partially takes care of (1) but extent-size reservations
+ * will have to periodically relog even if there's no writeout in progress.
+ * This can happen if the CoW extent size hint is set, which you really want.
+ * Third, EFIs cannot currently be automatically relogged into newer
+ * transactions to advance the log tail.  Fourth, stuffing the log full of
+ * EFIs places an upper bound on the number of CoW allocations that can be
+ * held filesystem-wide at any given time.  Recording them in the refcount
+ * btree doesn't require us to maintain any state in memory and doesn't pin
+ * the log.
+ */
+/*
+ * Adjust the refcounts of CoW allocations.  These allocations are "magic"
+ * in that they're not referenced anywhere else in the filesystem, so we
+ * stash them in the refcount btree with a refcount of 1 until either file
+ * remapping (or CoW cancellation) happens.
+ */
+STATIC int
+xfs_refcount_adjust_cow_extents(
+	struct xfs_btree_cur	*cur,
+	xfs_agblock_t		agbno,
+	xfs_extlen_t		aglen,
+	enum xfs_refc_adjust_op	adj,
+	struct xfs_defer_ops	*dfops,
+	struct xfs_owner_info	*oinfo)
+{
+	struct xfs_refcount_irec	ext, tmp;
+	int				error;
+	int				found_rec, found_tmp;
+
+	if (aglen == 0)
+		return 0;
+
+	/* Find any overlapping refcount records */
+	error = xfs_refcountbt_lookup_ge(cur, agbno, &found_rec);
+	if (error)
+		goto out_error;
+	error = xfs_refcountbt_get_rec(cur, &ext, &found_rec);
+	if (error)
+		goto out_error;
+	if (!found_rec) {
+		ext.rc_startblock = cur->bc_mp->m_sb.sb_agblocks;
+		ext.rc_blockcount = 0;
+		ext.rc_refcount = 0;
+	}
+
+	switch (adj) {
+	case XFS_REFCOUNT_ADJUST_COW_ALLOC:
+		/* Adding a CoW reservation, there should be nothing here. */
+		XFS_WANT_CORRUPTED_GOTO(cur->bc_mp,
+				ext.rc_startblock >= agbno + aglen, out_error);
+
+		tmp.rc_startblock = agbno;
+		tmp.rc_blockcount = aglen;
+		tmp.rc_refcount = 1;
+		trace_xfs_refcount_modify_extent(cur->bc_mp,
+				cur->bc_private.a.agno, &tmp);
+
+		error = xfs_refcountbt_insert(cur, &tmp,
+				&found_tmp);
+		if (error)
+			goto out_error;
+		XFS_WANT_CORRUPTED_GOTO(cur->bc_mp,
+				found_tmp == 1, out_error);
+		break;
+	case XFS_REFCOUNT_ADJUST_COW_FREE:
+		/* Removing a CoW reservation, there should be one extent. */
+		XFS_WANT_CORRUPTED_GOTO(cur->bc_mp,
+			ext.rc_startblock == agbno, out_error);
+		XFS_WANT_CORRUPTED_GOTO(cur->bc_mp,
+			ext.rc_blockcount == aglen, out_error);
+		XFS_WANT_CORRUPTED_GOTO(cur->bc_mp,
+			ext.rc_refcount == 1, out_error);
+
+		ext.rc_refcount = 0;
+		trace_xfs_refcount_modify_extent(cur->bc_mp,
+				cur->bc_private.a.agno, &ext);
+		error = xfs_refcountbt_delete(cur, &found_rec);
+		if (error)
+			goto out_error;
+		XFS_WANT_CORRUPTED_GOTO(cur->bc_mp,
+				found_rec == 1, out_error);
+		break;
+	default:
+		ASSERT(0);
+	}
+
+	return error;
+out_error:
+	trace_xfs_refcount_modify_extent_error(cur->bc_mp,
+			cur->bc_private.a.agno, error, _RET_IP_);
+	return error;
+}
+
+/*
+ * Add or remove refcount btree entries for CoW reservations.
+ */
+STATIC int
+xfs_refcount_adjust_cow(
+	struct xfs_btree_cur	*cur,
+	xfs_agblock_t		agbno,
+	xfs_extlen_t		aglen,
+	enum xfs_refc_adjust_op	adj,
+	struct xfs_defer_ops	*dfops)
+{
+	bool			shape_changed;
+	int			error;
+
+	/*
+	 * Ensure that no rcextents cross the boundary of the adjustment range.
+	 */
+	error = xfs_refcount_split_extent(cur, agbno, &shape_changed);
+	if (error)
+		goto out_error;
+
+	error = xfs_refcount_split_extent(cur, agbno + aglen, &shape_changed);
+	if (error)
+		goto out_error;
+
+	/*
+	 * Try to merge with the left or right extents of the range.
+	 */
+	error = xfs_refcount_merge_extents(cur, &agbno, &aglen, adj,
+			XFS_FIND_RCEXT_COW, &shape_changed);
+	if (error)
+		goto out_error;
+
+	/* Now that we've taken care of the ends, adjust the middle extents */
+	error = xfs_refcount_adjust_cow_extents(cur, agbno, aglen, adj,
+			dfops, NULL);
+	if (error)
+		goto out_error;
+
+	return 0;
+
+out_error:
+	trace_xfs_refcount_adjust_cow_error(cur->bc_mp, cur->bc_private.a.agno,
+			error, _RET_IP_);
+	return error;
+}
+
+/*
+ * Record a CoW allocation in the refcount btree.
+ */
+STATIC int
+__xfs_refcount_cow_alloc(
+	struct xfs_btree_cur	*rcur,
+	xfs_agblock_t		agbno,
+	xfs_extlen_t		aglen,
+	struct xfs_defer_ops	*dfops)
+{
+	int			error;
+
+	trace_xfs_refcount_cow_increase(rcur->bc_mp, rcur->bc_private.a.agno,
+			agbno, aglen);
+
+	/* Add refcount btree reservation */
+	error = xfs_refcount_adjust_cow(rcur, agbno, aglen,
+			XFS_REFCOUNT_ADJUST_COW_ALLOC, dfops);
+	if (error)
+		return error;
+
+	/* Add rmap entry */
+	if (xfs_sb_version_hasrmapbt(&rcur->bc_mp->m_sb)) {
+		error = xfs_rmap_alloc_defer(rcur->bc_mp, dfops,
+				rcur->bc_private.a.agno,
+				agbno, aglen, XFS_RMAP_OWN_COW);
+		if (error)
+			return error;
+	}
+
+	return error;
+}
+
+/*
+ * Remove a CoW allocation from the refcount btree.
+ */
+STATIC int
+__xfs_refcount_cow_free(
+	struct xfs_btree_cur	*rcur,
+	xfs_agblock_t		agbno,
+	xfs_extlen_t		aglen,
+	struct xfs_defer_ops	*dfops)
+{
+	int			error;
+
+	trace_xfs_refcount_cow_decrease(rcur->bc_mp, rcur->bc_private.a.agno,
+			agbno, aglen);
+
+	/* Remove refcount btree reservation */
+	error = xfs_refcount_adjust_cow(rcur, agbno, aglen,
+			XFS_REFCOUNT_ADJUST_COW_FREE, dfops);
+	if (error)
+		return error;
+
+	/* Remove rmap entry */
+	if (xfs_sb_version_hasrmapbt(&rcur->bc_mp->m_sb)) {
+		error = xfs_rmap_free_defer(rcur->bc_mp, dfops,
+				rcur->bc_private.a.agno,
+				agbno, aglen, XFS_RMAP_OWN_COW);
+		if (error)
+			return error;
+	}
+
+	return error;
+}
+
+/* Record a CoW staging extent in the refcount btree. */
+int
+xfs_refcount_alloc_cow_extent(
+	struct xfs_mount		*mp,
+	struct xfs_defer_ops		*dfops,
+	xfs_fsblock_t			fsb,
+	xfs_extlen_t			len)
+{
+	struct xfs_refcount_intent	ri;
+
+	ri.ri_type = XFS_REFCOUNT_ALLOC_COW;
+	ri.ri_startblock = fsb;
+	ri.ri_blockcount = len;
+
+	return __xfs_refcount_add(mp, dfops, &ri);
+}
+
+/* Forget a CoW staging event in the refcount btree. */
+int
+xfs_refcount_free_cow_extent(
+	struct xfs_mount		*mp,
+	struct xfs_defer_ops		*dfops,
+	xfs_fsblock_t			fsb,
+	xfs_extlen_t			len)
+{
+	struct xfs_refcount_intent	ri;
+
+	ri.ri_type = XFS_REFCOUNT_FREE_COW;
+	ri.ri_startblock = fsb;
+	ri.ri_blockcount = len;
+
+	return __xfs_refcount_add(mp, dfops, &ri);
 }
