@@ -76,6 +76,8 @@ xfs_refcountbt_alloc_block(
 	struct xfs_alloc_arg	args;		/* block allocation args */
 	int			error;		/* error return value */
 
+	XFS_BTREE_TRACE_CURSOR(cur, XBT_ENTRY);
+
 	memset(&args, 0, sizeof(args));
 	args.tp = cur->bc_tp;
 	args.mp = cur->bc_mp;
@@ -85,6 +87,7 @@ xfs_refcountbt_alloc_block(
 	args.firstblock = args.fsbno;
 	xfs_rmap_ag_owner(&args.oinfo, XFS_RMAP_OWN_REFC);
 	args.minlen = args.maxlen = args.prod = 1;
+	args.resv = XFS_AG_RESV_METADATA;
 
 	error = xfs_alloc_vextent(&args);
 	if (error)
@@ -116,17 +119,20 @@ xfs_refcountbt_free_block(
 	struct xfs_buf		*bp)
 {
 	struct xfs_mount	*mp = cur->bc_mp;
-	struct xfs_trans	*tp = cur->bc_tp;
 	xfs_fsblock_t		fsbno = XFS_DADDR_TO_FSB(mp, XFS_BUF_ADDR(bp));
 	struct xfs_owner_info	oinfo;
+	int			error;
 
 	trace_xfs_refcountbt_free_block(cur->bc_mp, cur->bc_private.a.agno,
 			XFS_FSB_TO_AGBNO(cur->bc_mp, fsbno), 1);
 	xfs_rmap_ag_owner(&oinfo, XFS_RMAP_OWN_REFC);
-	xfs_bmap_add_free(mp, cur->bc_private.a.dfops, fsbno, 1,
-			&oinfo);
-	xfs_trans_binval(tp, bp);
-	return 0;
+	error = xfs_free_extent(cur->bc_tp, fsbno, 1, &oinfo,
+			XFS_AG_RESV_METADATA);
+	if (error)
+		return error;
+
+	xfs_trans_binval(cur->bc_tp, bp);
+	return error;
 }
 
 STATIC int
@@ -395,4 +401,49 @@ xfs_refcountbt_max_size(
 		return 0;
 
 	return xfs_refcountbt_calc_size(mp, mp->m_sb.sb_agblocks);
+}
+
+/* Count the blocks in the reference count tree. */
+static int
+xfs_refcountbt_count_blocks(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_extlen_t		*tree_blocks)
+{
+	struct xfs_buf		*agbp;
+	struct xfs_btree_cur	*cur;
+	int			error;
+
+	error = xfs_alloc_read_agf(mp, NULL, agno, 0, &agbp);
+	if (error)
+		return error;
+	cur = xfs_refcountbt_init_cursor(mp, NULL, agbp, agno, NULL);
+	error = xfs_btree_count_blocks(cur, tree_blocks);
+	xfs_btree_del_cursor(cur, error ? XFS_BTREE_ERROR : XFS_BTREE_NOERROR);
+	xfs_trans_brelse(NULL, agbp);
+
+	return error;
+}
+
+/*
+ * Figure out how many blocks to reserve and how many are used by this btree.
+ */
+int
+xfs_refcountbt_calc_reserves(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno,
+	xfs_extlen_t		*ask,
+	xfs_extlen_t		*used)
+{
+	xfs_extlen_t		tree_len = 0;
+	int			error;
+
+	if (!xfs_sb_version_hasreflink(&mp->m_sb))
+		return 0;
+
+	*ask += xfs_refcountbt_max_size(mp);
+	error = xfs_refcountbt_count_blocks(mp, agno, &tree_len);
+	*used += tree_len;
+
+	return error;
 }

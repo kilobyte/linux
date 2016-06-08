@@ -51,6 +51,7 @@
 #include "xfs_refcount_item.h"
 #include "xfs_bmap_item.h"
 #include "xfs_reflink.h"
+#include "xfs_refcount_btree.h"
 
 #include <linux/namei.h>
 #include <linux/init.h>
@@ -1306,6 +1307,7 @@ xfs_fs_remount(
 		 */
 		xfs_restore_resvblks(mp);
 		xfs_log_work_queue(mp);
+		xfs_fs_reserve_ag_blocks(mp);
 
 		/* Recover any CoW blocks that never got remapped. */
 		error = xfs_reflink_recover_cow(mp);
@@ -1323,6 +1325,9 @@ xfs_fs_remount(
 		 * reserve pool size so that if we get remounted rw, we can
 		 * return it to the same size.
 		 */
+
+		xfs_fs_unreserve_ag_blocks(mp);
+
 		xfs_save_resvblks(mp);
 		xfs_quiesce_attr(mp);
 		mp->m_flags |= XFS_MOUNT_RDONLY;

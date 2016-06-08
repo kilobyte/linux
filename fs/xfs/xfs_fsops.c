@@ -42,6 +42,8 @@
 #include "xfs_trace.h"
 #include "xfs_log.h"
 #include "xfs_filestream.h"
+#include "xfs_refcount_btree.h"
+#include "xfs_ag_resv.h"
 
 /*
  * File system operations
@@ -677,6 +679,9 @@ xfs_growfs_data_private(
 			continue;
 		}
 	}
+
+	xfs_fs_reserve_ag_blocks(mp);
+
 	return saved_error ? saved_error : error;
 
  error0:
@@ -970,4 +975,55 @@ xfs_do_force_shutdown(
 		xfs_alert(mp,
 	"Please umount the filesystem and rectify the problem(s)");
 	}
+}
+
+/*
+ * Reserve free space for per-AG metadata.
+ */
+void
+xfs_fs_reserve_ag_blocks(
+	struct xfs_mount	*mp)
+{
+	xfs_agnumber_t		agno;
+	struct xfs_perag	*pag;
+	int			error = 0;
+	int			err2;
+
+	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
+		pag = xfs_perag_get(mp, agno);
+		err2 = xfs_ag_resv_init(pag);
+		xfs_perag_put(pag);
+		if (err2 && !error)
+			error = err2;
+	}
+
+	if (error) {
+		xfs_warn(mp, "Error %d reserving metadata blocks.", error);
+		xfs_force_shutdown(mp, (error == -EFSCORRUPTED) ?
+			SHUTDOWN_CORRUPT_INCORE : SHUTDOWN_META_IO_ERROR);
+	}
+}
+
+/*
+ * Free space reserved for per-AG metadata.
+ */
+void
+xfs_fs_unreserve_ag_blocks(
+	struct xfs_mount	*mp)
+{
+	xfs_agnumber_t		agno;
+	struct xfs_perag	*pag;
+	int			error = 0;
+	int			err2;
+
+	for (agno = 0; agno < mp->m_sb.sb_agcount; agno++) {
+		pag = xfs_perag_get(mp, agno);
+		err2 = xfs_ag_resv_free(pag);
+		xfs_perag_put(pag);
+		if (err2 && !error)
+			error = err2;
+	}
+
+	if (error)
+		xfs_warn(mp, "Error %d unreserving metadata blocks.", error);
 }

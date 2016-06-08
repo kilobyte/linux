@@ -130,4 +130,11 @@ int xfs_rmap_finish_one(struct xfs_trans *tp, enum xfs_rmap_intent_type type,
 		xfs_fsblock_t startblock, xfs_filblks_t blockcount,
 		xfs_exntst_t state, struct xfs_btree_cur **pcur);
 
+extern xfs_extlen_t xfs_rmapbt_calc_size(struct xfs_mount *mp,
+		unsigned long long len);
+extern xfs_extlen_t xfs_rmapbt_max_size(struct xfs_mount *mp);
+
+extern int xfs_rmapbt_calc_reserves(struct xfs_mount *mp,
+		xfs_agnumber_t agno, xfs_extlen_t *ask, xfs_extlen_t *used);
+
 #endif	/* __XFS_RMAP_BTREE_H__ */

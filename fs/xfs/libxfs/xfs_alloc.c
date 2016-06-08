@@ -139,8 +139,6 @@ xfs_alloc_ag_max_usable(struct xfs_mount *mp)
 		/* rmap root block + full tree split on full AG */
 		blocks += 1 + (2 * mp->m_ag_maxlevels) - 1;
 	}
-	if (xfs_sb_version_hasreflink(&mp->m_sb))
-		blocks += xfs_refcountbt_max_size(mp);
 
 	return mp->m_sb.sb_agblocks - blocks;
 }
