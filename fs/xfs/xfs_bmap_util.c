@@ -685,7 +685,7 @@ xfs_bmap_punch_delalloc_range(
 		xfs_bmbt_irec_t	imap;
 		int		nimaps = 1;
 		xfs_fsblock_t	firstblock;
-		xfs_bmap_free_t flist;
+		struct xfs_defer_ops flist;
 
 		/*
 		 * Map the range first and check that it is a delalloc extent
@@ -721,7 +721,7 @@ xfs_bmap_punch_delalloc_range(
 		 * allocated or freed for a delalloc extent and hence we need
 		 * don't cancel or finish them after the xfs_bunmapi() call.
 		 */
-		xfs_bmap_init(&flist, &firstblock);
+		xfs_defer_init(&flist, &firstblock);
 		error = xfs_bunmapi(NULL, ip, start_fsb, 1, 0, 1, &firstblock,
 					&flist, &done);
 		if (error)
@@ -884,7 +884,7 @@ xfs_alloc_file_space(
 	int			rt;
 	xfs_trans_t		*tp;
 	xfs_bmbt_irec_t		imaps[1], *imapp;
-	xfs_bmap_free_t		free_list;
+	struct xfs_defer_ops	free_list;
 	uint			qblocks, resblks, resrtextents;
 	int			error;
 
@@ -975,7 +975,7 @@ xfs_alloc_file_space(
 
 		xfs_trans_ijoin(tp, ip, 0);
 
-		xfs_bmap_init(&free_list, &firstfsb);
+		xfs_defer_init(&free_list, &firstfsb);
 		error = xfs_bmapi_write(tp, ip, startoffset_fsb,
 					allocatesize_fsb, alloc_type, &firstfsb,
 					resblks, imapp, &nimaps, &free_list);
@@ -985,7 +985,7 @@ xfs_alloc_file_space(
 		/*
 		 * Complete the transaction
 		 */
-		error = xfs_bmap_finish(&tp, &free_list, NULL);
+		error = xfs_defer_finish(&tp, &free_list, NULL);
 		if (error)
 			goto error0;
 
@@ -1008,7 +1008,7 @@ xfs_alloc_file_space(
 	return error;
 
 error0:	/* Cancel bmap, unlock inode, unreserve quota blocks, cancel trans */
-	xfs_bmap_cancel(&free_list);
+	xfs_defer_cancel(&free_list);
 	xfs_trans_unreserve_quota_nblks(tp, ip, (long)qblocks, 0, quota_flag);
 
 error1:	/* Just cancel transaction */
@@ -1122,7 +1122,7 @@ xfs_free_file_space(
 	xfs_fileoff_t		endoffset_fsb;
 	int			error;
 	xfs_fsblock_t		firstfsb;
-	xfs_bmap_free_t		free_list;
+	struct xfs_defer_ops	free_list;
 	xfs_bmbt_irec_t		imap;
 	xfs_off_t		ioffset;
 	xfs_off_t		iendoffset;
@@ -1245,7 +1245,7 @@ xfs_free_file_space(
 		/*
 		 * issue the bunmapi() call to free the blocks
 		 */
-		xfs_bmap_init(&free_list, &firstfsb);
+		xfs_defer_init(&free_list, &firstfsb);
 		error = xfs_bunmapi(tp, ip, startoffset_fsb,
 				  endoffset_fsb - startoffset_fsb,
 				  0, 2, &firstfsb, &free_list, &done);
@@ -1255,7 +1255,7 @@ xfs_free_file_space(
 		/*
 		 * complete the transaction
 		 */
-		error = xfs_bmap_finish(&tp, &free_list, NULL);
+		error = xfs_defer_finish(&tp, &free_list, ip);
 		if (error)
 			goto error0;
 
@@ -1267,7 +1267,7 @@ xfs_free_file_space(
 	return error;
 
  error0:
-	xfs_bmap_cancel(&free_list);
+	xfs_defer_cancel(&free_list);
  error1:
 	xfs_trans_cancel(tp);
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
@@ -1333,7 +1333,7 @@ xfs_shift_file_space(
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
 	int			error;
-	struct xfs_bmap_free	free_list;
+	struct xfs_defer_ops	free_list;
 	xfs_fsblock_t		first_block;
 	xfs_fileoff_t		stop_fsb;
 	xfs_fileoff_t		next_fsb;
@@ -1411,7 +1411,7 @@ xfs_shift_file_space(
 
 		xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
 
-		xfs_bmap_init(&free_list, &first_block);
+		xfs_defer_init(&free_list, &first_block);
 
 		/*
 		 * We are using the write transaction in which max 2 bmbt
@@ -1423,7 +1423,7 @@ xfs_shift_file_space(
 		if (error)
 			goto out_bmap_cancel;
 
-		error = xfs_bmap_finish(&tp, &free_list, NULL);
+		error = xfs_defer_finish(&tp, &free_list, NULL);
 		if (error)
 			goto out_bmap_cancel;
 
@@ -1433,7 +1433,7 @@ xfs_shift_file_space(
 	return error;
 
 out_bmap_cancel:
-	xfs_bmap_cancel(&free_list);
+	xfs_defer_cancel(&free_list);
 out_trans_cancel:
 	xfs_trans_cancel(tp);
 	return error;
