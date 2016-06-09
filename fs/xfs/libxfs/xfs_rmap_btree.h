@@ -74,4 +74,13 @@ int xfs_rmap_free(struct xfs_trans *tp, struct xfs_buf *agbp,
 		  xfs_agnumber_t agno, xfs_agblock_t bno, xfs_extlen_t len,
 		  struct xfs_owner_info *oinfo);
 
+typedef int (*xfs_rmapbt_query_range_fn)(
+	struct xfs_btree_cur	*cur,
+	struct xfs_rmap_irec	*rec,
+	void			*priv);
+
+int xfs_rmapbt_query_range(struct xfs_btree_cur *cur,
+		struct xfs_rmap_irec *low_rec, struct xfs_rmap_irec *high_rec,
+		xfs_rmapbt_query_range_fn fn, void *priv);
+
 #endif	/* __XFS_RMAP_BTREE_H__ */

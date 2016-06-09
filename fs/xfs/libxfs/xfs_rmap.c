@@ -184,3 +184,46 @@ out_error:
 	trace_xfs_rmap_alloc_extent_error(mp, agno, bno, len, false, oinfo);
 	return error;
 }
+
+struct xfs_rmapbt_query_range_info {
+	xfs_rmapbt_query_range_fn	fn;
+	void				*priv;
+};
+
+/* Format btree record and pass to our callback. */
+STATIC int
+xfs_rmapbt_query_range_helper(
+	struct xfs_btree_cur	*cur,
+	union xfs_btree_rec	*rec,
+	void			*priv)
+{
+	struct xfs_rmapbt_query_range_info	*query = priv;
+	struct xfs_rmap_irec			irec;
+	int					error;
+
+	error = xfs_rmapbt_btrec_to_irec(rec, &irec);
+	if (error)
+		return error;
+	return query->fn(cur, &irec, query->priv);
+}
+
+/* Find all rmaps between two keys. */
+int
+xfs_rmapbt_query_range(
+	struct xfs_btree_cur		*cur,
+	struct xfs_rmap_irec		*low_rec,
+	struct xfs_rmap_irec		*high_rec,
+	xfs_rmapbt_query_range_fn	fn,
+	void				*priv)
+{
+	union xfs_btree_irec		low_brec;
+	union xfs_btree_irec		high_brec;
+	struct xfs_rmapbt_query_range_info	query;
+
+	low_brec.r = *low_rec;
+	high_brec.r = *high_rec;
+	query.priv = priv;
+	query.fn = fn;
+	return xfs_btree_query_range(cur, &low_brec, &high_brec,
+			xfs_rmapbt_query_range_helper, &query);
+}
