@@ -20,4 +20,7 @@
 #ifndef __XFS_REFLINK_H
 #define __XFS_REFLINK_H 1
 
+extern int xfs_reflink_reserve_cow_range(struct xfs_inode *ip, xfs_off_t pos,
+		xfs_off_t len);
+
 #endif /* __XFS_REFLINK_H */

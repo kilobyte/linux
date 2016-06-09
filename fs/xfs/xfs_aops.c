@@ -31,6 +31,7 @@
 #include "xfs_bmap.h"
 #include "xfs_bmap_util.h"
 #include "xfs_bmap_btree.h"
+#include "xfs_reflink.h"
 #include <linux/gfp.h>
 #include <linux/mpage.h>
 #include <linux/pagevec.h>
@@ -1566,6 +1567,15 @@ xfs_vm_write_begin(
 	page = grab_cache_page_write_begin(mapping, index, flags);
 	if (!page)
 		return -ENOMEM;
+
+	/* Reserve delalloc blocks for CoW. */
+	status = xfs_reflink_reserve_cow_range(XFS_I(mapping->host), pos, len);
+	if (status) {
+		unlock_page(page);
+		put_page(page);
+		*pagep = NULL;
+		return status;
+	}
 
 	status = __block_write_begin(page, pos, len, xfs_get_blocks);
 	if (xfs_mp_fail_writes(mp))

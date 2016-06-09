@@ -37,6 +37,7 @@
 #include "xfs_log.h"
 #include "xfs_icache.h"
 #include "xfs_pnfs.h"
+#include "xfs_reflink.h"
 
 #include <linux/dcache.h>
 #include <linux/falloc.h>
@@ -1550,6 +1551,14 @@ xfs_filemap_page_mkwrite(
 	file_update_time(vma->vm_file);
 	xfs_ilock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
 
+	/* Reserve delalloc blocks for CoW. */
+	ret = xfs_reflink_reserve_cow_range(XFS_I(inode),
+			vmf->page->index << PAGE_SHIFT, PAGE_SIZE);
+	if (ret) {
+		ret = block_page_mkwrite_return(ret);
+		goto out;
+	}
+
 	if (IS_DAX(inode)) {
 		ret = __dax_mkwrite(vma, vmf, xfs_get_blocks_dax_fault);
 	} else {
@@ -1557,6 +1566,7 @@ xfs_filemap_page_mkwrite(
 		ret = block_page_mkwrite_return(ret);
 	}
 
+out:
 	xfs_iunlock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
 	sb_end_pagefault(inode->i_sb);
 
