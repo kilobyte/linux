@@ -1383,10 +1383,150 @@ xfs_rmap_ino_owner(
 #define XFS_RMAP_OWN_INODES	(-7ULL)	/* Inode chunk */
 #define XFS_RMAP_OWN_MIN	(-8ULL) /* guard */
 
+#define XFS_RMAP_NON_INODE_OWNER(owner)	(!!((owner) & (1ULL << 63)))
+
+/*
+ * Data record structure
+ */
+struct xfs_rmap_rec {
+	__be32		rm_startblock;	/* extent start block */
+	__be32		rm_blockcount;	/* extent length */
+	__be64		rm_owner;	/* extent owner */
+	__be64		rm_offset;	/* offset within the owner */
+};
+
+/*
+ * rmap btree record
+ *  rm_offset:63 is the attribute fork flag
+ *  rm_offset:62 is the bmbt block flag
+ *  rm_offset:61 is the unwritten extent flag (same as l0:63 in bmbt)
+ *  rm_offset:54-60 aren't used and should be zero
+ *  rm_offset:0-53 is the block offset within the inode
+ */
+#define XFS_RMAP_OFF_ATTR_FORK	((__uint64_t)1ULL << 63)
+#define XFS_RMAP_OFF_BMBT_BLOCK	((__uint64_t)1ULL << 62)
+#define XFS_RMAP_OFF_UNWRITTEN	((__uint64_t)1ULL << 61)
+
+#define XFS_RMAP_LEN_MAX	((__uint32_t)~0U)
+#define XFS_RMAP_OFF_FLAGS	(XFS_RMAP_OFF_ATTR_FORK | \
+				 XFS_RMAP_OFF_BMBT_BLOCK | \
+				 XFS_RMAP_OFF_UNWRITTEN)
+#define XFS_RMAP_OFF_MASK	((__uint64_t)0x3FFFFFFFFFFFFFULL)
+
+#define XFS_RMAP_OFF(off)		((off) & XFS_RMAP_OFF_MASK)
+
+#define XFS_RMAP_IS_BMBT_BLOCK(off)	(!!((off) & XFS_RMAP_OFF_BMBT_BLOCK))
+#define XFS_RMAP_IS_ATTR_FORK(off)	(!!((off) & XFS_RMAP_OFF_ATTR_FORK))
+#define XFS_RMAP_IS_UNWRITTEN(len)	(!!((off) & XFS_RMAP_OFF_UNWRITTEN))
+
+#define RMAPBT_STARTBLOCK_BITLEN	32
+#define RMAPBT_BLOCKCOUNT_BITLEN	32
+#define RMAPBT_OWNER_BITLEN		64
+#define RMAPBT_ATTRFLAG_BITLEN		1
+#define RMAPBT_BMBTFLAG_BITLEN		1
+#define RMAPBT_EXNTFLAG_BITLEN		1
+#define RMAPBT_UNUSED_OFFSET_BITLEN	7
+#define RMAPBT_OFFSET_BITLEN		54
+
+#define XFS_RMAP_ATTR_FORK		(1 << 0)
+#define XFS_RMAP_BMBT_BLOCK		(1 << 1)
+#define XFS_RMAP_UNWRITTEN		(1 << 2)
+#define XFS_RMAP_KEY_FLAGS		(XFS_RMAP_ATTR_FORK | \
+					 XFS_RMAP_BMBT_BLOCK)
+#define XFS_RMAP_REC_FLAGS		(XFS_RMAP_UNWRITTEN)
+struct xfs_rmap_irec {
+	xfs_agblock_t	rm_startblock;	/* extent start block */
+	xfs_extlen_t	rm_blockcount;	/* extent length */
+	__uint64_t	rm_owner;	/* extent owner */
+	__uint64_t	rm_offset;	/* offset within the owner */
+	unsigned int	rm_flags;	/* state flags */
+};
+
+static inline __u64
+xfs_rmap_irec_offset_pack(
+	const struct xfs_rmap_irec	*irec)
+{
+	__u64			x;
+
+	x = XFS_RMAP_OFF(irec->rm_offset);
+	if (irec->rm_flags & XFS_RMAP_ATTR_FORK)
+		x |= XFS_RMAP_OFF_ATTR_FORK;
+	if (irec->rm_flags & XFS_RMAP_BMBT_BLOCK)
+		x |= XFS_RMAP_OFF_BMBT_BLOCK;
+	if (irec->rm_flags & XFS_RMAP_UNWRITTEN)
+		x |= XFS_RMAP_OFF_UNWRITTEN;
+	return x;
+}
+
+static inline int
+xfs_rmap_irec_offset_unpack(
+	__u64			offset,
+	struct xfs_rmap_irec	*irec)
+{
+	if (offset & ~(XFS_RMAP_OFF_MASK | XFS_RMAP_OFF_FLAGS))
+		return -EFSCORRUPTED;
+	irec->rm_offset = XFS_RMAP_OFF(offset);
+	if (offset & XFS_RMAP_OFF_ATTR_FORK)
+		irec->rm_flags |= XFS_RMAP_ATTR_FORK;
+	if (offset & XFS_RMAP_OFF_BMBT_BLOCK)
+		irec->rm_flags |= XFS_RMAP_BMBT_BLOCK;
+	if (offset & XFS_RMAP_OFF_UNWRITTEN)
+		irec->rm_flags |= XFS_RMAP_UNWRITTEN;
+	return 0;
+}
+
+/*
+ * Key structure
+ *
+ * We don't use the length for lookups
+ */
+struct xfs_rmap_key {
+	__be32		rm_startblock;	/* extent start block */
+	__be64		rm_owner;	/* extent owner */
+	__be64		rm_offset;	/* offset within the owner */
+} __attribute__((packed));
+
+/* btree pointer type */
+typedef __be32 xfs_rmap_ptr_t;
+
 #define	XFS_RMAP_BLOCK(mp) \
 	(xfs_sb_version_hasfinobt(&((mp)->m_sb)) ? \
 	 XFS_FIBT_BLOCK(mp) + 1 : \
 	 XFS_IBT_BLOCK(mp) + 1)
+
+static inline void
+xfs_owner_info_unpack(
+	struct xfs_owner_info	*oinfo,
+	uint64_t		*owner,
+	uint64_t		*offset,
+	unsigned int		*flags)
+{
+	unsigned int		r = 0;
+
+	*owner = oinfo->oi_owner;
+	*offset = oinfo->oi_offset;
+	if (oinfo->oi_flags & XFS_OWNER_INFO_ATTR_FORK)
+		r |= XFS_RMAP_ATTR_FORK;
+	if (oinfo->oi_flags & XFS_OWNER_INFO_BMBT_BLOCK)
+		r |= XFS_RMAP_BMBT_BLOCK;
+	*flags = r;
+}
+
+static inline void
+xfs_owner_info_pack(
+	struct xfs_owner_info	*oinfo,
+	uint64_t		owner,
+	uint64_t		offset,
+	unsigned int		flags)
+{
+	oinfo->oi_owner = owner;
+	oinfo->oi_offset = XFS_RMAP_OFF(offset);
+	oinfo->oi_flags = 0;
+	if (flags & XFS_RMAP_ATTR_FORK)
+		oinfo->oi_flags |= XFS_OWNER_INFO_ATTR_FORK;
+	if (flags & XFS_RMAP_BMBT_BLOCK)
+		oinfo->oi_flags |= XFS_OWNER_INFO_BMBT_BLOCK;
+}
 
 /*
  * BMAP Btree format definitions
