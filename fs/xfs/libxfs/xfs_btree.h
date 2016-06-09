@@ -43,6 +43,7 @@ union xfs_btree_key {
 	xfs_alloc_key_t			alloc;
 	struct xfs_inobt_key		inobt;
 	struct xfs_rmap_key		rmap;
+	struct xfs_refcount_key		refc;
 };
 
 union xfs_btree_rec {
@@ -51,6 +52,7 @@ union xfs_btree_rec {
 	struct xfs_alloc_rec		alloc;
 	struct xfs_inobt_rec		inobt;
 	struct xfs_rmap_rec		rmap;
+	struct xfs_refcount_rec		refc;
 };
 
 /*
@@ -221,6 +223,15 @@ union xfs_btree_irec {
 	xfs_bmbt_irec_t			b;
 	xfs_inobt_rec_incore_t		i;
 	struct xfs_rmap_irec		r;
+	struct xfs_refcount_irec	rc;
+};
+
+/* Per-AG btree private information. */
+union xfs_btree_cur_private {
+	struct {
+		unsigned long	nr_ops;		/* # record updates */
+		int		shape_changes;	/* # of extent splits */
+	} refc;
 };
 
 /*
@@ -247,6 +258,7 @@ typedef struct xfs_btree_cur
 			struct xfs_buf	*agbp;	/* agf/agi buffer pointer */
 			struct xfs_defer_ops *dfops;	/* deferred updates */
 			xfs_agnumber_t	agno;	/* ag number */
+			union xfs_btree_cur_private	priv;
 		} a;
 		struct {			/* needed for BMAP */
 			struct xfs_inode *ip;	/* pointer to our inode */
