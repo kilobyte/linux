@@ -4180,6 +4180,7 @@ xlog_recover_process_efi(
 	int			error = 0;
 	xfs_extent_t		*extp;
 	xfs_fsblock_t		startblock_fsb;
+	struct xfs_owner_info	oinfo;
 
 	ASSERT(!test_bit(XFS_EFI_RECOVERED, &efip->efi_flags));
 
@@ -4211,10 +4212,12 @@ xlog_recover_process_efi(
 		return error;
 	efdp = xfs_trans_get_efd(tp, efip, efip->efi_format.efi_nextents);
 
+	oinfo.oi_owner = 0;
 	for (i = 0; i < efip->efi_format.efi_nextents; i++) {
 		extp = &(efip->efi_format.efi_extents[i]);
 		error = xfs_trans_free_extent(tp, efdp, extp->ext_start,
-					      extp->ext_len);
+					      extp->ext_len,
+					      &oinfo);
 		if (error)
 			goto abort_error;
 

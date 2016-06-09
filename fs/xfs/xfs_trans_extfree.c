@@ -118,13 +118,14 @@ xfs_trans_free_extent(
 	struct xfs_trans	*tp,
 	struct xfs_efd_log_item	*efdp,
 	xfs_fsblock_t		start_block,
-	xfs_extlen_t		ext_len)
+	xfs_extlen_t		ext_len,
+	struct xfs_owner_info	*oinfo)
 {
 	uint			next_extent;
 	struct xfs_extent	*extp;
 	int			error;
 
-	error = xfs_free_extent(tp, start_block, ext_len);
+	error = xfs_free_extent(tp, start_block, ext_len, oinfo);
 
 	/*
 	 * Mark the transaction dirty, even on error. This ensures the

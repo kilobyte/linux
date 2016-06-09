@@ -99,7 +99,8 @@ xfs_bmap_free_finish_item(
 	free = container_of(item, struct xfs_bmap_free_item, xbfi_list);
 	error = xfs_trans_free_extent(tp, done_item,
 			free->xbfi_startblock,
-			free->xbfi_blockcount);
+			free->xbfi_blockcount,
+			&free->xbfi_oinfo);
 	kmem_free(free);
 	return error;
 }
