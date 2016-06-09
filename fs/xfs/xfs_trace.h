@@ -2470,6 +2470,9 @@ DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent);
 DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent_done);
 DEFINE_RMAP_EVENT(xfs_rmap_alloc_extent_error);
 
+DEFINE_BUSY_EVENT(xfs_rmapbt_alloc_block);
+DEFINE_BUSY_EVENT(xfs_rmapbt_free_block);
+
 #endif /* _TRACE_XFS_H */
 
 #undef TRACE_INCLUDE_PATH

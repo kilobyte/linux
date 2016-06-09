@@ -216,6 +216,7 @@ union xfs_btree_irec {
 	xfs_alloc_rec_incore_t		a;
 	xfs_bmbt_irec_t			b;
 	xfs_inobt_rec_incore_t		i;
+	struct xfs_rmap_irec		r;
 };
 
 /*
