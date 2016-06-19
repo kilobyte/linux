@@ -754,10 +754,9 @@ el0_svc:
 	uxtw	scno, w8			// syscall number in w8
 	mov	sc_nr, #__NR_syscalls
 #ifdef CONFIG_ARM64_ILP32
-	adrp	x17, sys_call_ilp32_table	// load ilp32 syscall table pointer
 	tst	x16, #_TIF_32BIT_AARCH64
 	b.eq	el0_svc_naked			// We are using LP64  syscall table
-	mov	stbl, x17			// We are using ILP32 syscall table
+	adrp	stbl, sys_call_ilp32_table	// load ilp32 syscall table pointer
 	delouse_input_regs
 #endif
 el0_svc_naked:					// compat entry point
