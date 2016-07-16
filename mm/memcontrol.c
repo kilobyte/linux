@@ -2653,6 +2653,31 @@ static struct mem_cgroup *mem_cgroup_lookup(unsigned short id)
 	return mem_cgroup_from_id(id);
 }
 
+u64 mem_cgroup_res_read_u64(struct mem_cgroup *mem, int member)
+{
+	return res_counter_read_u64(&mem->res, member);
+}
+
+u64 mem_cgroup_memsw_read_u64(struct mem_cgroup *mem, int member)
+{
+	return res_counter_read_u64(&mem->memsw, member);
+}
+
+s64 mem_cgroup_stat_read_cache(struct mem_cgroup *mem)
+{
+	return mem_cgroup_read_stat(mem, MEM_CGROUP_STAT_CACHE);
+}
+
+s64 mem_cgroup_stat_read_anon(struct mem_cgroup *mem)
+{
+	return mem_cgroup_read_stat(mem, MEM_CGROUP_STAT_RSS);
+}
+
+s64 mem_cgroup_stat_read_mapped(struct mem_cgroup *mem)
+{
+	return mem_cgroup_read_stat(mem, MEM_CGROUP_STAT_FILE_MAPPED);
+}
+
 /*
  * try_get_mem_cgroup_from_page - look up page's memcg association
  * @page: the page

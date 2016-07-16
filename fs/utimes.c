@@ -8,6 +8,8 @@
 #include <linux/stat.h>
 #include <linux/utime.h>
 #include <linux/syscalls.h>
+#include <linux/mount.h>
+#include <linux/vs_cowbl.h>
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
@@ -52,12 +54,18 @@ static int utimes_common(struct path *path, struct timespec *times)
 {
 	int error;
 	struct iattr newattrs;
-	struct inode *inode = path->dentry->d_inode;
 	struct inode *delegated_inode = NULL;
+	struct inode *inode;
+
+	error = cow_check_and_break(path);
+	if (error)
+		goto out;
 
 	error = mnt_want_write(path->mnt);
 	if (error)
 		goto out;
+
+	inode = path->dentry->d_inode;
 
 	if (times && times[0].tv_nsec == UTIME_NOW &&
 		     times[1].tv_nsec == UTIME_NOW)

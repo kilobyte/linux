@@ -337,6 +337,8 @@ config SECCOMP
 
 	  If unsure, say Y. Only embedded should say N here.
 
+source "kernel/vserver/Kconfig"
+
 source "security/Kconfig"
 
 source "crypto/Kconfig"

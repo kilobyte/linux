@@ -62,6 +62,7 @@ struct mount {
 	int mnt_expiry_mark;		/* true if marked for expiry */
 	struct hlist_head mnt_pins;
 	struct path mnt_ex_mountpoint;
+	vtag_t mnt_tag;			/* tagging used for vfsmount */
 };
 
 #define MNT_NS_INTERNAL ERR_PTR(-EINVAL) /* distinct from any mnt_namespace */

@@ -279,7 +279,7 @@
 270	i386	tgkill			sys_tgkill
 271	i386	utimes			sys_utimes			compat_sys_utimes
 272	i386	fadvise64_64		sys_fadvise64_64		sys32_fadvise64_64
-273	i386	vserver
+273	i386	vserver			sys_vserver			sys32_vserver
 274	i386	mbind			sys_mbind
 275	i386	get_mempolicy		sys_get_mempolicy		compat_sys_get_mempolicy
 276	i386	set_mempolicy		sys_set_mempolicy

@@ -85,6 +85,8 @@
 #include <linux/rwsem.h>
 #include <linux/nsproxy.h>
 #include <linux/ipc_namespace.h>
+#include <linux/vs_base.h>
+#include <linux/vs_limit.h>
 
 #include <linux/uaccess.h>
 #include "util.h"
@@ -515,6 +517,7 @@ static int newary(struct ipc_namespace *ns, struct ipc_params *params)
 
 	sma->sem_perm.mode = (semflg & S_IRWXUGO);
 	sma->sem_perm.key = key;
+	sma->sem_perm.xid = vx_current_xid();
 
 	sma->sem_perm.security = NULL;
 	retval = security_sem_alloc(sma);
@@ -544,6 +547,9 @@ static int newary(struct ipc_namespace *ns, struct ipc_params *params)
 		return id;
 	}
 	ns->used_sems += nsems;
+	/* FIXME: obsoleted? */
+	vx_semary_inc(sma);
+	vx_nsems_add(sma, nsems);
 
 	sem_unlock(sma, -1);
 	rcu_read_unlock();
@@ -1132,6 +1138,9 @@ static void freeary(struct ipc_namespace *ns, struct kern_ipc_perm *ipcp)
 
 	wake_up_sem_queue_do(&tasks);
 	ns->used_sems -= sma->sem_nsems;
+	/* FIXME: obsoleted? */
+	vx_nsems_sub(sma, sma->sem_nsems);
+	vx_semary_dec(sma);
 	ipc_rcu_putref(sma, sem_rcu_free);
 }
 

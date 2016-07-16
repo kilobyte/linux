@@ -322,7 +322,7 @@
 /* 310 */	CALL(sys_request_key)
 		CALL(sys_keyctl)
 		CALL(ABI(sys_semtimedop, sys_oabi_semtimedop))
-/* vserver */	CALL(sys_ni_syscall)
+		CALL(sys_vserver)
 		CALL(sys_ioprio_set)
 /* 315 */	CALL(sys_ioprio_get)
 		CALL(sys_inotify_init)

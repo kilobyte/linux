@@ -41,6 +41,7 @@ struct loop_device {
 	struct loop_func_table *lo_encryption;
 	__u32           lo_init[2];
 	kuid_t		lo_key_owner;	/* Who set the key */
+	vxid_t		lo_xid;
 	int		(*ioctl)(struct loop_device *, int cmd, 
 				 unsigned long arg); 
 

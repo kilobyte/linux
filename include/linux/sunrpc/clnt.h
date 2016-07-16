@@ -51,7 +51,8 @@ struct rpc_clnt {
 				cl_discrtry : 1,/* disconnect before retry */
 				cl_noretranstimeo: 1,/* No retransmit timeouts */
 				cl_autobind : 1,/* use getport() */
-				cl_chatty   : 1;/* be verbose */
+				cl_chatty   : 1,/* be verbose */
+				cl_tag      : 1;/* context tagging */
 
 	struct rpc_rtt *	cl_rtt;		/* RTO estimator data */
 	const struct rpc_timeout *cl_timeout;	/* Timeout strategy */

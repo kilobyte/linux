@@ -25,6 +25,8 @@
  */
 
 #include <linux/quotaops.h>
+#include <linux/vs_tag.h>
+
 #include "ext3.h"
 #include "namei.h"
 #include "xattr.h"
@@ -915,6 +917,7 @@ restart:
 					submit_bh(READ | REQ_META | REQ_PRIO,
 						  bh);
 				}
+		dx_propagate_tag(nd, inode);
 			}
 		}
 		if ((bh = bh_use[ra_ptr++]) == NULL)
@@ -2568,6 +2571,7 @@ const struct inode_operations ext3_dir_inode_operations = {
 	.listxattr	= ext3_listxattr,
 	.removexattr	= generic_removexattr,
 #endif
+	.sync_flags	= ext3_sync_flags,
 	.get_acl	= ext3_get_acl,
 	.set_acl	= ext3_set_acl,
 };

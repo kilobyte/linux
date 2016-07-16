@@ -26,6 +26,7 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
 	stat->nlink = inode->i_nlink;
 	stat->uid = inode->i_uid;
 	stat->gid = inode->i_gid;
+	stat->tag = inode->i_tag;
 	stat->rdev = inode->i_rdev;
 	stat->size = i_size_read(inode);
 	stat->atime = inode->i_atime;

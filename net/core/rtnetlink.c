@@ -1280,6 +1280,8 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 		hlist_for_each_entry(dev, head, index_hlist) {
 			if (idx < s_idx)
 				goto cont;
+			if (!nx_dev_visible(skb->sk->sk_nx_info, dev))
+				continue;
 			err = rtnl_fill_ifinfo(skb, dev, RTM_NEWLINK,
 					       NETLINK_CB(cb->skb).portid,
 					       cb->nlh->nlmsg_seq, 0,
@@ -2255,6 +2257,9 @@ void rtmsg_ifinfo(int type, struct net_device *dev, unsigned int change,
 	struct sk_buff *skb;
 	int err = -ENOBUFS;
 	size_t if_info_size;
+
+	if (!nx_dev_visible(current_nx_info(), dev))
+		return;
 
 	skb = nlmsg_new((if_info_size = if_nlmsg_size(dev, 0)), flags);
 	if (skb == NULL)

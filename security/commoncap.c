@@ -76,6 +76,7 @@ int cap_netlink_send(struct sock *sk, struct sk_buff *skb)
 int cap_capable(const struct cred *cred, struct user_namespace *targ_ns,
 		int cap, int audit)
 {
+	struct vx_info *vxi = current_vx_info(); /* FIXME: get vxi from cred? */
 	struct user_namespace *ns = targ_ns;
 
 	/* See if cred has the capability in the target user namespace
@@ -84,8 +85,12 @@ int cap_capable(const struct cred *cred, struct user_namespace *targ_ns,
 	 */
 	for (;;) {
 		/* Do we have the necessary capabilities? */
-		if (ns == cred->user_ns)
-			return cap_raised(cred->cap_effective, cap) ? 0 : -EPERM;
+		if (ns == cred->user_ns) {
+			if (vx_info_flags(vxi, VXF_STATE_SETUP, 0) &&
+			    cap_raised(cred->cap_effective, cap))
+				return 0;
+			return vx_cap_raised(vxi, cred->cap_effective, cap) ? 0 : -EPERM;
+		}
 
 		/* Have we tried all of the parent namespaces? */
 		if (ns == &init_user_ns)
@@ -636,7 +641,7 @@ int cap_inode_setxattr(struct dentry *dentry, const char *name,
 
 	if (!strncmp(name, XATTR_SECURITY_PREFIX,
 		     sizeof(XATTR_SECURITY_PREFIX) - 1) &&
-	    !capable(CAP_SYS_ADMIN))
+		!vx_capable(CAP_SYS_ADMIN, VXC_FS_SECURITY))
 		return -EPERM;
 	return 0;
 }
@@ -662,7 +667,7 @@ int cap_inode_removexattr(struct dentry *dentry, const char *name)
 
 	if (!strncmp(name, XATTR_SECURITY_PREFIX,
 		     sizeof(XATTR_SECURITY_PREFIX) - 1) &&
-	    !capable(CAP_SYS_ADMIN))
+		!vx_capable(CAP_SYS_ADMIN, VXC_FS_SECURITY))
 		return -EPERM;
 	return 0;
 }

@@ -7,6 +7,8 @@
 #include <linux/statfs.h>
 #include <linux/security.h>
 #include <linux/uaccess.h>
+#include <linux/vs_base.h>
+#include <linux/vs_dlimit.h>
 #include "internal.h"
 
 static int flags_by_mnt(int mnt_flags)
@@ -60,6 +62,8 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 	retval = dentry->d_sb->s_op->statfs(dentry, buf);
 	if (retval == 0 && buf->f_frsize == 0)
 		buf->f_frsize = buf->f_bsize;
+	if (!vx_check(0, VS_ADMIN|VS_WATCH))
+		vx_vsi_statfs(dentry->d_sb, buf);
 	return retval;
 }
 

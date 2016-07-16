@@ -61,6 +61,9 @@
 #include <linux/rhashtable.h>
 #include <asm/cacheflush.h>
 #include <linux/hash.h>
+#include <linux/vs_context.h>
+#include <linux/vs_network.h>
+#include <linux/vs_limit.h>
 
 #include <net/net_namespace.h>
 #include <net/sock.h>
@@ -2927,6 +2930,8 @@ static struct sock *netlink_seq_socket_idx(struct seq_file *seq, loff_t pos)
 				s = (struct sock *)nlk;
 
 				if (sock_net(s) != seq_file_net(seq))
+					continue;
+				if (!nx_check(s->sk_nid, VS_WATCH_P | VS_IDENT))
 					continue;
 				if (off == pos) {
 					iter->link = i;

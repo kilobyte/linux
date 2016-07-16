@@ -436,6 +436,8 @@ struct inode *proc_get_inode(struct super_block *sb, struct proc_dir_entry *de)
 			inode->i_uid = de->uid;
 			inode->i_gid = de->gid;
 		}
+		if (de->vx_flags)
+			PROC_I(inode)->vx_flags = de->vx_flags;
 		if (de->size)
 			inode->i_size = de->size;
 		if (de->nlink)

@@ -22,6 +22,7 @@
 #include <linux/spinlock.h>
 #include <linux/rcupdate.h>
 #include <linux/workqueue.h>
+#include <linux/vs_limit.h>
 
 int sysctl_nr_open __read_mostly = 1024*1024;
 int sysctl_nr_open_min = BITS_PER_LONG;
@@ -309,6 +310,8 @@ struct files_struct *dup_fd(struct files_struct *oldf, int *errorp)
 		struct file *f = *old_fds++;
 		if (f) {
 			get_file(f);
+			/* TODO: sum it first for check and performance */
+			vx_openfd_inc(open_files - i);
 		} else {
 			/*
 			 * The fd may be claimed in the fd bitmap but not yet
@@ -369,9 +372,11 @@ static struct fdtable *close_files(struct files_struct * files)
 					filp_close(file, files);
 					cond_resched_rcu_qs();
 				}
+				vx_openfd_dec(i);
 			}
 			i++;
 			set >>= 1;
+			cond_resched();
 		}
 	}
 
@@ -487,6 +492,7 @@ repeat:
 	else
 		__clear_close_on_exec(fd, fdt);
 	error = fd;
+	vx_openfd_inc(fd);
 #if 1
 	/* Sanity check */
 	if (rcu_access_pointer(fdt->fd[fd]) != NULL) {
@@ -517,6 +523,7 @@ static void __put_unused_fd(struct files_struct *files, unsigned int fd)
 	__clear_open_fd(fd, fdt);
 	if (fd < files->next_fd)
 		files->next_fd = fd;
+	vx_openfd_dec(fd);
 }
 
 void put_unused_fd(unsigned int fd)
@@ -784,6 +791,8 @@ __releases(&files->file_lock)
 
 	if (tofree)
 		filp_close(tofree, files);
+	else
+		vx_openfd_inc(fd);	/* fd was unused */
 
 	return fd;
 

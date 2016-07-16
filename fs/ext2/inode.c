@@ -32,6 +32,7 @@
 #include <linux/fiemap.h>
 #include <linux/namei.h>
 #include <linux/aio.h>
+#include <linux/vs_tag.h>
 #include "ext2.h"
 #include "acl.h"
 #include "xip.h"
@@ -1182,7 +1183,7 @@ static void ext2_truncate_blocks(struct inode *inode, loff_t offset)
 		return;
 	if (ext2_inode_is_fast_symlink(inode))
 		return;
-	if (IS_APPEND(inode) || IS_IMMUTABLE(inode))
+	if (IS_APPEND(inode) || IS_IXORUNLINK(inode))
 		return;
 	__ext2_truncate_blocks(inode, offset);
 }
@@ -1273,36 +1274,61 @@ void ext2_set_inode_flags(struct inode *inode)
 {
 	unsigned int flags = EXT2_I(inode)->i_flags;
 
-	inode->i_flags &= ~(S_SYNC|S_APPEND|S_IMMUTABLE|S_NOATIME|S_DIRSYNC);
+	inode->i_flags &= ~(S_IMMUTABLE | S_IXUNLINK |
+		S_SYNC | S_APPEND | S_NOATIME | S_DIRSYNC);
+
+
+	if (flags & EXT2_IMMUTABLE_FL)
+		inode->i_flags |= S_IMMUTABLE;
+	if (flags & EXT2_IXUNLINK_FL)
+		inode->i_flags |= S_IXUNLINK;
+
 	if (flags & EXT2_SYNC_FL)
 		inode->i_flags |= S_SYNC;
 	if (flags & EXT2_APPEND_FL)
 		inode->i_flags |= S_APPEND;
-	if (flags & EXT2_IMMUTABLE_FL)
-		inode->i_flags |= S_IMMUTABLE;
 	if (flags & EXT2_NOATIME_FL)
 		inode->i_flags |= S_NOATIME;
 	if (flags & EXT2_DIRSYNC_FL)
 		inode->i_flags |= S_DIRSYNC;
+
+	inode->i_vflags &= ~(V_BARRIER | V_COW);
+
+	if (flags & EXT2_BARRIER_FL)
+		inode->i_vflags |= V_BARRIER;
+	if (flags & EXT2_COW_FL)
+		inode->i_vflags |= V_COW;
 }
 
 /* Propagate flags from i_flags to EXT2_I(inode)->i_flags */
 void ext2_get_inode_flags(struct ext2_inode_info *ei)
 {
 	unsigned int flags = ei->vfs_inode.i_flags;
+	unsigned int vflags = ei->vfs_inode.i_vflags;
 
-	ei->i_flags &= ~(EXT2_SYNC_FL|EXT2_APPEND_FL|
-			EXT2_IMMUTABLE_FL|EXT2_NOATIME_FL|EXT2_DIRSYNC_FL);
+	ei->i_flags &= ~(EXT2_SYNC_FL | EXT2_APPEND_FL |
+			EXT2_IMMUTABLE_FL | EXT2_IXUNLINK_FL |
+			EXT2_NOATIME_FL | EXT2_DIRSYNC_FL |
+			EXT2_BARRIER_FL | EXT2_COW_FL);
+
+	if (flags & S_IMMUTABLE)
+		ei->i_flags |= EXT2_IMMUTABLE_FL;
+	if (flags & S_IXUNLINK)
+		ei->i_flags |= EXT2_IXUNLINK_FL;
+
 	if (flags & S_SYNC)
 		ei->i_flags |= EXT2_SYNC_FL;
 	if (flags & S_APPEND)
 		ei->i_flags |= EXT2_APPEND_FL;
-	if (flags & S_IMMUTABLE)
-		ei->i_flags |= EXT2_IMMUTABLE_FL;
 	if (flags & S_NOATIME)
 		ei->i_flags |= EXT2_NOATIME_FL;
 	if (flags & S_DIRSYNC)
 		ei->i_flags |= EXT2_DIRSYNC_FL;
+
+	if (vflags & V_BARRIER)
+		ei->i_flags |= EXT2_BARRIER_FL;
+	if (vflags & V_COW)
+		ei->i_flags |= EXT2_COW_FL;
 }
 
 struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
@@ -1338,8 +1364,10 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 		i_uid |= le16_to_cpu(raw_inode->i_uid_high) << 16;
 		i_gid |= le16_to_cpu(raw_inode->i_gid_high) << 16;
 	}
-	i_uid_write(inode, i_uid);
-	i_gid_write(inode, i_gid);
+	i_uid_write(inode, INOTAG_UID(DX_TAG(inode), i_uid, i_gid));
+	i_gid_write(inode, INOTAG_GID(DX_TAG(inode), i_uid, i_gid));
+	i_tag_write(inode, INOTAG_TAG(DX_TAG(inode), i_uid, i_gid,
+		le16_to_cpu(raw_inode->i_raw_tag)));
 	set_nlink(inode, le16_to_cpu(raw_inode->i_links_count));
 	inode->i_size = le32_to_cpu(raw_inode->i_size);
 	inode->i_atime.tv_sec = (signed)le32_to_cpu(raw_inode->i_atime);
@@ -1437,8 +1465,10 @@ static int __ext2_write_inode(struct inode *inode, int do_sync)
 	struct ext2_inode_info *ei = EXT2_I(inode);
 	struct super_block *sb = inode->i_sb;
 	ino_t ino = inode->i_ino;
-	uid_t uid = i_uid_read(inode);
-	gid_t gid = i_gid_read(inode);
+	uid_t uid = from_kuid(&init_user_ns,
+		TAGINO_KUID(DX_TAG(inode), inode->i_uid, inode->i_tag));
+	gid_t gid = from_kgid(&init_user_ns,
+		TAGINO_KGID(DX_TAG(inode), inode->i_gid, inode->i_tag));
 	struct buffer_head * bh;
 	struct ext2_inode * raw_inode = ext2_get_inode(sb, ino, &bh);
 	int n;
@@ -1474,6 +1504,9 @@ static int __ext2_write_inode(struct inode *inode, int do_sync)
 		raw_inode->i_uid_high = 0;
 		raw_inode->i_gid_high = 0;
 	}
+#ifdef CONFIG_TAGGING_INTERN
+	raw_inode->i_raw_tag = cpu_to_le16(i_tag_read(inode));
+#endif
 	raw_inode->i_links_count = cpu_to_le16(inode->i_nlink);
 	raw_inode->i_size = cpu_to_le32(inode->i_size);
 	raw_inode->i_atime = cpu_to_le32(inode->i_atime.tv_sec);
@@ -1554,7 +1587,8 @@ int ext2_setattr(struct dentry *dentry, struct iattr *iattr)
 	if (is_quota_modification(inode, iattr))
 		dquot_initialize(inode);
 	if ((iattr->ia_valid & ATTR_UID && !uid_eq(iattr->ia_uid, inode->i_uid)) ||
-	    (iattr->ia_valid & ATTR_GID && !gid_eq(iattr->ia_gid, inode->i_gid))) {
+	    (iattr->ia_valid & ATTR_GID && !gid_eq(iattr->ia_gid, inode->i_gid)) ||
+	    (iattr->ia_valid & ATTR_TAG && !tag_eq(iattr->ia_tag, inode->i_tag))) {
 		error = dquot_transfer(inode, iattr);
 		if (error)
 			return error;

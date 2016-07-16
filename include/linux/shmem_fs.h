@@ -10,6 +10,9 @@
 
 /* inode in-kernel data */
 
+#define TMPFS_SUPER_MAGIC	0x01021994
+
+
 struct shmem_inode_info {
 	spinlock_t		lock;
 	unsigned int		seals;		/* shmem seals */

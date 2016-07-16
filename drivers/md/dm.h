@@ -50,6 +50,8 @@ struct dm_dev_internal {
 struct dm_table;
 struct dm_md_mempools;
 
+vxid_t dm_get_xid(struct mapped_device *md);
+
 /*-----------------------------------------------------------------
  * Internal table functions.
  *---------------------------------------------------------------*/

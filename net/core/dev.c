@@ -122,6 +122,7 @@
 #include <linux/in.h>
 #include <linux/jhash.h>
 #include <linux/random.h>
+#include <linux/vs_inet.h>
 #include <trace/events/napi.h>
 #include <trace/events/net.h>
 #include <trace/events/skb.h>
@@ -674,7 +675,8 @@ struct net_device *__dev_get_by_name(struct net *net, const char *name)
 	struct hlist_head *head = dev_name_hash(net, name);
 
 	hlist_for_each_entry(dev, head, name_hlist)
-		if (!strncmp(dev->name, name, IFNAMSIZ))
+		if (!strncmp(dev->name, name, IFNAMSIZ) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
 
 	return NULL;
@@ -699,7 +701,8 @@ struct net_device *dev_get_by_name_rcu(struct net *net, const char *name)
 	struct hlist_head *head = dev_name_hash(net, name);
 
 	hlist_for_each_entry_rcu(dev, head, name_hlist)
-		if (!strncmp(dev->name, name, IFNAMSIZ))
+		if (!strncmp(dev->name, name, IFNAMSIZ) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
 
 	return NULL;
@@ -749,7 +752,8 @@ struct net_device *__dev_get_by_index(struct net *net, int ifindex)
 	struct hlist_head *head = dev_index_hash(net, ifindex);
 
 	hlist_for_each_entry(dev, head, index_hlist)
-		if (dev->ifindex == ifindex)
+		if ((dev->ifindex == ifindex) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
 
 	return NULL;
@@ -767,7 +771,7 @@ EXPORT_SYMBOL(__dev_get_by_index);
  *	about locking. The caller must hold RCU lock.
  */
 
-struct net_device *dev_get_by_index_rcu(struct net *net, int ifindex)
+struct net_device *dev_get_by_index_real_rcu(struct net *net, int ifindex)
 {
 	struct net_device *dev;
 	struct hlist_head *head = dev_index_hash(net, ifindex);
@@ -776,6 +780,16 @@ struct net_device *dev_get_by_index_rcu(struct net *net, int ifindex)
 		if (dev->ifindex == ifindex)
 			return dev;
 
+	return NULL;
+}
+EXPORT_SYMBOL(dev_get_by_index_real_rcu);
+
+struct net_device *dev_get_by_index_rcu(struct net *net, int ifindex)
+{
+	struct net_device *dev = dev_get_by_index_real_rcu(net, ifindex);
+
+	if (nx_dev_visible(current_nx_info(), dev))
+		return dev;
 	return NULL;
 }
 EXPORT_SYMBOL(dev_get_by_index_rcu);
@@ -860,7 +874,8 @@ struct net_device *dev_getbyhwaddr_rcu(struct net *net, unsigned short type,
 
 	for_each_netdev_rcu(net, dev)
 		if (dev->type == type &&
-		    !memcmp(dev->dev_addr, ha, dev->addr_len))
+		    !memcmp(dev->dev_addr, ha, dev->addr_len) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
 
 	return NULL;
@@ -872,9 +887,11 @@ struct net_device *__dev_getfirstbyhwtype(struct net *net, unsigned short type)
 	struct net_device *dev;
 
 	ASSERT_RTNL();
-	for_each_netdev(net, dev)
-		if (dev->type == type)
+	for_each_netdev(net, dev) {
+		if ((dev->type == type) &&
+		    nx_dev_visible(current_nx_info(), dev))
 			return dev;
+	}
 
 	return NULL;
 }
@@ -886,7 +903,8 @@ struct net_device *dev_getfirstbyhwtype(struct net *net, unsigned short type)
 
 	rcu_read_lock();
 	for_each_netdev_rcu(net, dev)
-		if (dev->type == type) {
+		if ((dev->type == type) &&
+		    nx_dev_visible(current_nx_info(), dev)) {
 			dev_hold(dev);
 			ret = dev;
 			break;
@@ -916,7 +934,8 @@ struct net_device *__dev_get_by_flags(struct net *net, unsigned short if_flags,
 
 	ret = NULL;
 	for_each_netdev(net, dev) {
-		if (((dev->flags ^ if_flags) & mask) == 0) {
+		if ((((dev->flags ^ if_flags) & mask) == 0) &&
+			nx_dev_visible(current_nx_info(), dev)) {
 			ret = dev;
 			break;
 		}
@@ -993,6 +1012,8 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 			if (!sscanf(d->name, name, &i))
 				continue;
 			if (i < 0 || i >= max_netdevices)
+				continue;
+			if (!nx_dev_visible(current_nx_info(), d))
 				continue;
 
 			/*  avoid cases where sscanf is not exact inverse of printf */

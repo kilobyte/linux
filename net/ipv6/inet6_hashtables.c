@@ -16,6 +16,7 @@
 
 #include <linux/module.h>
 #include <linux/random.h>
+#include <linux/vs_inet6.h>
 
 #include <net/inet_connection_sock.h>
 #include <net/inet_hashtables.h>
@@ -116,7 +117,6 @@ struct sock *__inet6_lookup_established(struct net *net,
 	unsigned int slot = hash & hashinfo->ehash_mask;
 	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];
 
-
 	rcu_read_lock();
 begin:
 	sk_nulls_for_each_rcu(sk, node, &head->chain) {
@@ -158,6 +158,9 @@ static inline int compute_score(struct sock *sk, struct net *net,
 			if (!ipv6_addr_equal(&sk->sk_v6_rcv_saddr, daddr))
 				return -1;
 			score++;
+		} else {
+			if (!v6_addr_in_nx_info(sk->sk_nx_info, daddr, -1))
+				return -1;
 		}
 		if (sk->sk_bound_dev_if) {
 			if (sk->sk_bound_dev_if != dif)

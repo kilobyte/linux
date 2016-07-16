@@ -39,6 +39,7 @@
 #include <linux/utsname.h>
 #include <linux/pagemap.h>
 #include <linux/sunrpc/svcauth_gss.h>
+#include <linux/vs_tag.h>
 
 #include "idmap.h"
 #include "acl.h"
@@ -2440,12 +2441,16 @@ out_acl:
 		*p++ = cpu_to_be32(stat.nlink);
 	}
 	if (bmval1 & FATTR4_WORD1_OWNER) {
-		status = nfsd4_encode_user(xdr, rqstp, stat.uid);
+		status = nfsd4_encode_user(xdr, rqstp,
+			TAGINO_KUID(DX_TAG(dentry->d_inode),
+				stat.uid, stat.tag));
 		if (status)
 			goto out;
 	}
 	if (bmval1 & FATTR4_WORD1_OWNER_GROUP) {
-		status = nfsd4_encode_group(xdr, rqstp, stat.gid);
+		status = nfsd4_encode_group(xdr, rqstp,
+			TAGINO_KGID(DX_TAG(dentry->d_inode),
+				stat.gid, stat.tag));
 		if (status)
 			goto out;
 	}

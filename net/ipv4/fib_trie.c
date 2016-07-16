@@ -2530,6 +2530,7 @@ static int fib_route_seq_show(struct seq_file *seq, void *v)
 
 			seq_setwidth(seq, 127);
 
+			/* FIXME: check for network context? */
 			if (fi)
 				seq_printf(seq,
 					 "%s\t%08X\t%08X\t%04X\t%d\t%u\t"

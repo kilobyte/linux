@@ -23,6 +23,7 @@
 #include <linux/stop_machine.h>
 #include <linux/pvclock_gtod.h>
 #include <linux/compiler.h>
+#include <linux/vs_time.h>
 
 #include "tick-internal.h"
 #include "ntp_internal.h"
@@ -679,7 +680,9 @@ void getnstime_raw_and_real(struct timespec *ts_raw, struct timespec *ts_real)
 	} while (read_seqcount_retry(&tk_core.seq, seq));
 
 	timespec_add_ns(ts_raw, nsecs_raw);
+	vx_adjust_timespec(ts_raw);
 	timespec_add_ns(ts_real, nsecs_real);
+	vx_adjust_timespec(ts_real);
 }
 EXPORT_SYMBOL(getnstime_raw_and_real);
 

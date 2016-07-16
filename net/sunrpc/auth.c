@@ -15,6 +15,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/sunrpc/gss_api.h>
 #include <linux/spinlock.h>
+#include <linux/vs_tag.h>
 
 #ifdef RPC_DEBUG
 # define RPCDBG_FACILITY	RPCDBG_AUTH
@@ -630,6 +631,7 @@ rpcauth_lookupcred(struct rpc_auth *auth, int flags)
 	memset(&acred, 0, sizeof(acred));
 	acred.uid = cred->fsuid;
 	acred.gid = cred->fsgid;
+	acred.tag = make_ktag(&init_user_ns, dx_current_tag());
 	acred.group_info = cred->group_info;
 	ret = auth->au_ops->lookup_cred(auth, &acred, flags);
 	return ret;
@@ -669,6 +671,7 @@ rpcauth_bind_root_cred(struct rpc_task *task, int lookupflags)
 	struct auth_cred acred = {
 		.uid = GLOBAL_ROOT_UID,
 		.gid = GLOBAL_ROOT_GID,
+		.tag = KTAGT_INIT(dx_current_tag()),
 	};
 
 	dprintk("RPC: %5u looking up %s cred\n",

@@ -242,7 +242,7 @@
 233	common	epoll_ctl		sys_epoll_ctl
 234	common	tgkill			sys_tgkill
 235	common	utimes			sys_utimes
-236	64	vserver
+236	64	vserver			sys_vserver
 237	common	mbind			sys_mbind
 238	common	set_mempolicy		sys_set_mempolicy
 239	common	get_mempolicy		sys_get_mempolicy

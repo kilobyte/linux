@@ -8,7 +8,8 @@ enum pid_type
 	PIDTYPE_PID,
 	PIDTYPE_PGID,
 	PIDTYPE_SID,
-	PIDTYPE_MAX
+	PIDTYPE_MAX,
+	PIDTYPE_REALPID
 };
 
 /*
@@ -170,6 +171,7 @@ static inline pid_t pid_nr(struct pid *pid)
 }
 
 pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns);
+pid_t pid_unmapped_nr_ns(struct pid *pid, struct pid_namespace *ns);
 pid_t pid_vnr(struct pid *pid);
 
 #define do_each_pid_task(pid, type, task)				\
