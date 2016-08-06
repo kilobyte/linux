@@ -637,11 +637,13 @@ acpi_ds_create_operand(struct acpi_walk_state *walk_state,
 			ACPI_DEBUG_PRINT((ACPI_DB_DISPATCH,
 					  "Argument previously created, already stacked\n"));
 
-			acpi_db_display_argument_object(walk_state->
+			if(walk_state->num_operands>0) {
+				acpi_db_display_argument_object(walk_state->
 							operands[walk_state->
 								 num_operands -
 								 1],
 							walk_state);
+			}
 
 			/*
 			 * Use value that was already previously returned
