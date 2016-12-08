@@ -87,7 +87,7 @@
 # define n_tty_trace(f, args...)
 #endif
 
-enum { ESnormal, ESesc, EScsi, ESsetG };
+enum { ESnormal, ESesc, EScsi, ESsetG, ESxc3, ESxc5 };
 
 struct n_tty_data {
 	/* producer-published */
@@ -404,7 +404,7 @@ static inline int is_continuation(unsigned char c, struct tty_struct *tty)
 static int do_olcuc_char(unsigned char c, struct tty_struct *tty, int space)
 {
 	/* 3 bytes per character */
-	static const char *runes = "ᚨᛒᚳᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᛩᚱᛊᛏᚢᚡᚹᛪᚣᛉ";
+	static const char *runes = "ᚨᛒᚳᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᛩᚱᛊᛏᚢᚡᚹᛪᚣᛉᚦᛇᛜ";
 	struct n_tty_data *ldata = tty->disc_data;
 
 	switch (ldata->vt_state) {
@@ -419,6 +419,31 @@ static int do_olcuc_char(unsigned char c, struct tty_struct *tty, int space)
 	case ESsetG:
 		ldata->vt_state = ESnormal;
 		break;
+	case ESxc3:
+		if (c == 0xbe || c == 0x9e) { /* th */
+			c = 'A' + 26;
+			goto print_rune;
+		} else if (c == 0xa6 || c == 0x86) { /* ae */
+			c = 'A' + 27;
+			goto print_rune;
+		}
+		if (space < 2)
+			return -1;
+		tty_put_char(tty, 0xc3); /* no match, print the stolen prefix */
+		ldata->vt_state = ESnormal;
+		ldata->column++;
+		break;
+	case ESxc5:
+		if (c == 0x8b || c == 0x8a) { /* ng */
+			c = 'A' + 28;
+			goto print_rune;
+		}
+		if (space < 2)
+			return -1;
+		tty_put_char(tty, 0xc5); /* no match, print the stolen prefix */
+		ldata->vt_state = ESnormal;
+		ldata->column++;
+		break;
 	default:
 		if (c == '\e') {
 			ldata->vt_state = ESesc;
@@ -428,8 +453,10 @@ static int do_olcuc_char(unsigned char c, struct tty_struct *tty, int space)
 			c -= 32;
 		if (I_IUTF8(tty)) {
 			if (c >= 'A' && c <= 'Z') {
+print_rune:
 				if (space < 3)
 					return -1;
+				ldata->vt_state = ESnormal;
 				ldata->column++;
 				c -= 'A';
 				tty_put_char(tty, runes[3 * c + 0]);
@@ -437,6 +464,10 @@ static int do_olcuc_char(unsigned char c, struct tty_struct *tty, int space)
 				tty_put_char(tty, runes[3 * c + 2]);
 				return 1;
 			}
+			if (c == 0xc3)
+				return ldata->vt_state = ESxc3, 1;
+			if (c == 0xc5)
+				return ldata->vt_state = ESxc5, 1;
 		}
 	}
 	if (!iscntrl(c) && !is_continuation(c, tty))
