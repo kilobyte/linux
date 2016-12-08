@@ -87,6 +87,8 @@
 # define n_tty_trace(f, args...)
 #endif
 
+enum { ESnormal, ESesc, EScsi, ESsetG };
+
 struct n_tty_data {
 	/* producer-published */
 	size_t read_head;
@@ -121,6 +123,7 @@ struct n_tty_data {
 	unsigned int column;
 	unsigned int canon_column;
 	size_t echo_tail;
+	unsigned int vt_state;
 
 	struct mutex atomic_read_lock;
 	struct mutex output_lock;
@@ -392,6 +395,40 @@ static inline int is_continuation(unsigned char c, struct tty_struct *tty)
 	return I_IUTF8(tty) && is_utf8_continuation(c);
 }
 
+/* process one OLCUC char (possibly partial unicode)
+ *
+ * We need to partially parse ANSI sequences to avoid uppercasing them;
+ * only some commands require lowercase.
+ */
+
+static int do_olcuc_char(unsigned char c, struct tty_struct *tty)
+{
+	struct n_tty_data *ldata = tty->disc_data;
+
+	switch (ldata->vt_state) {
+	case ESesc:
+		ldata->vt_state = (c == '[') ? EScsi :
+				  strchr("%()*+-./", c) ? ESsetG : ESnormal;
+		break;
+	case EScsi:
+		if (!strchr("?;0123456789>!c$\" \\", c))
+			ldata->vt_state = ESnormal;
+		break;
+	case ESsetG:
+		ldata->vt_state = ESnormal;
+		break;
+	default:
+		if (c == '\e')
+			ldata->vt_state = ESesc;
+		else if (c >= 'a' && c <= 'z')
+			c -= 32;
+	}
+	if (!iscntrl(c) && !is_continuation(c, tty))
+		ldata->column++;
+	tty_put_char(tty, c);
+	return 1;
+}
+
 /**
  *	do_output_char			-	output one character
  *	@c: character (or partial unicode symbol)
@@ -462,12 +499,10 @@ static int do_output_char(unsigned char c, struct tty_struct *tty, int space)
 			ldata->column--;
 		break;
 	default:
-		if (!iscntrl(c)) {
-			if (O_OLCUC(tty))
-				c = toupper(c);
-			if (!is_continuation(c, tty))
-				ldata->column++;
-		}
+		if (O_OLCUC(tty))
+			return do_olcuc_char(c, tty);
+		if (!iscntrl(c) && !is_continuation(c, tty))
+			ldata->column++;
 		break;
 	}
 
@@ -568,12 +603,10 @@ static ssize_t process_output_block(struct tty_struct *tty,
 				ldata->column--;
 			break;
 		default:
-			if (!iscntrl(c)) {
-				if (O_OLCUC(tty))
-					goto break_out;
-				if (!is_continuation(c, tty))
-					ldata->column++;
-			}
+			if (O_OLCUC(tty))
+				goto break_out;
+			if (!iscntrl(c) && !is_continuation(c, tty))
+				ldata->column++;
 			break;
 		}
 	}
@@ -1895,6 +1928,7 @@ static int n_tty_open(struct tty_struct *tty)
 	ldata->num_overrun = 0;
 	ldata->no_room = 0;
 	ldata->lnext = 0;
+	ldata->vt_state = ESnormal;
 	tty->closing = 0;
 	/* indicate buffer work may resume */
 	clear_bit(TTY_LDISC_HALTED, &tty->flags);
