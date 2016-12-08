@@ -401,8 +401,10 @@ static inline int is_continuation(unsigned char c, struct tty_struct *tty)
  * only some commands require lowercase.
  */
 
-static int do_olcuc_char(unsigned char c, struct tty_struct *tty)
+static int do_olcuc_char(unsigned char c, struct tty_struct *tty, int space)
 {
+	/* 3 bytes per character */
+	static const char *runes = "ᚨᛒᚳᛞᛖᚠᚷᚺᛁᛃᚲᛚᛗᚾᛟᛈᛩᚱᛊᛏᚢᚡᚹᛪᚣᛉ";
 	struct n_tty_data *ldata = tty->disc_data;
 
 	switch (ldata->vt_state) {
@@ -418,10 +420,24 @@ static int do_olcuc_char(unsigned char c, struct tty_struct *tty)
 		ldata->vt_state = ESnormal;
 		break;
 	default:
-		if (c == '\e')
+		if (c == '\e') {
 			ldata->vt_state = ESesc;
-		else if (c >= 'a' && c <= 'z')
+			break;
+		}
+		if (c >= 'a' && c <= 'z')
 			c -= 32;
+		if (I_IUTF8(tty)) {
+			if (c >= 'A' && c <= 'Z') {
+				if (space < 3)
+					return -1;
+				ldata->column++;
+				c -= 'A';
+				tty_put_char(tty, runes[3 * c + 0]);
+				tty_put_char(tty, runes[3 * c + 1]);
+				tty_put_char(tty, runes[3 * c + 2]);
+				return 1;
+			}
+		}
 	}
 	if (!iscntrl(c) && !is_continuation(c, tty))
 		ldata->column++;
@@ -500,7 +516,7 @@ static int do_output_char(unsigned char c, struct tty_struct *tty, int space)
 		break;
 	default:
 		if (O_OLCUC(tty))
-			return do_olcuc_char(c, tty);
+			return do_olcuc_char(c, tty, space);
 		if (!iscntrl(c) && !is_continuation(c, tty))
 			ldata->column++;
 		break;
