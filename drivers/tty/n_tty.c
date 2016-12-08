@@ -123,7 +123,9 @@ struct n_tty_data {
 	unsigned int column;
 	unsigned int canon_column;
 	size_t echo_tail;
+#ifdef CONFIG_TTY_RUNES
 	unsigned int vt_state;
+#endif
 
 	struct mutex atomic_read_lock;
 	struct mutex output_lock;
@@ -395,6 +397,7 @@ static inline int is_continuation(unsigned char c, struct tty_struct *tty)
 	return I_IUTF8(tty) && is_utf8_continuation(c);
 }
 
+#ifdef CONFIG_TTY_RUNES
 /* process one OLCUC char (possibly partial unicode)
  *
  * We need to partially parse ANSI sequences to avoid uppercasing them;
@@ -476,6 +479,7 @@ print_rune:
 	tty_put_char(tty, c);
 	return 1;
 }
+#endif
 
 /**
  *	do_output_char			-	output one character
@@ -547,8 +551,10 @@ static int do_output_char(unsigned char c, struct tty_struct *tty, int space)
 			ldata->column--;
 		break;
 	default:
+#ifdef CONFIG_TTY_RUNES
 		if (O_OLCUC(tty))
 			return do_olcuc_char(c, tty, space);
+#endif
 		if (!iscntrl(c) && !is_continuation(c, tty))
 			ldata->column++;
 		break;
@@ -651,8 +657,10 @@ static ssize_t process_output_block(struct tty_struct *tty,
 				ldata->column--;
 			break;
 		default:
+#ifdef CONFIG_TTY_RUNES
 			if (O_OLCUC(tty))
 				goto break_out;
+#endif
 			if (!iscntrl(c) && !is_continuation(c, tty))
 				ldata->column++;
 			break;
@@ -1976,7 +1984,9 @@ static int n_tty_open(struct tty_struct *tty)
 	ldata->num_overrun = 0;
 	ldata->no_room = 0;
 	ldata->lnext = 0;
+#ifdef CONFIG_TTY_RUNES
 	ldata->vt_state = ESnormal;
+#endif
 	tty->closing = 0;
 	/* indicate buffer work may resume */
 	clear_bit(TTY_LDISC_HALTED, &tty->flags);

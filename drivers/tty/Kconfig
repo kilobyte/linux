@@ -151,6 +151,23 @@ config LEGACY_PTY_COUNT
 	  When not in use, each legacy PTY occupies 12 bytes on 32-bit
 	  architectures and 24 bytes on 64-bit architectures.
 
+config TTY_RUNES
+	bool "Runes on OLCUC"
+	default y
+	---help---
+	  Certain terminals from the days of Unix' infancy supported only
+	  all-caps, so-called "Great Runes".  Linux still has rudimentary
+	  support for those, although how can you connect one is another
+	  matter; you enable that via "stty olcuc".
+
+	  On anything modern, though (as in "stty iutf8"), you do get actual
+	  runes.  You need userspace fonts for that; modern distributions
+	  tend to install both raster (xterm/rxvt) and TrueType (most
+	  terminals) fonts on their default GUI setups.  Alas, this is not
+	  the case on console due to sharply limited character sets.
+
+	  (This is a joke option.)  C'mon, you know you want to say Y!
+
 config BFIN_JTAG_COMM
 	tristate "Blackfin JTAG Communication"
 	depends on BLACKFIN
