@@ -92,6 +92,15 @@
 	status = "okay";
 };
 
+&mmc1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mmc1_pins>;
+	vmmc-supply = <&reg_vcc3v3>; /* Should be DLDO4 */
+	non-removable;
+	bus-width = <4>;
+	status = "okay";
+};
+
 &ohci1 {
 	status = "okay";
 };
