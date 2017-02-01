@@ -3480,6 +3480,38 @@ static int sd_start_stop_device(struct scsi_disk *sdkp, int start)
 			res = 0;
 	}
 
+	/*
+	 * Wait for slow devices that signal they have fully entered
+	 * the stopped state before they actully did it.
+	 *
+	 * This behavior is apparently allowed per-spec for ATA
+	 * devices, and our SAT layer does not account for it.
+	 * Thus, on return, the device might still be in the process
+	 * of entering STANDBY state.
+	 *
+	 * Worse, apparently the ATA spec also says the unit should
+	 * return that it is already in STANDBY state *while still
+	 * entering that state*.
+	 *
+	 * SSDs absolutely depend on receiving a STANDBY IMMEDIATE
+	 * command prior to power off for a clean shutdown (and
+	 * likely we don't want to send them *anything else* in-
+	 * between either, to be on the safe side).
+	 *
+	 * As things stand, we are racing the SSD's firmware.  If it
+	 * finishes first, nothing bad happens.  If it doesn't, we
+	 * cut power while it is still saving metadata, and not only
+	 * this will cause extra FLASH wear (and maybe even damage
+	 * some cells), it also has a non-zero chance of bricking the
+	 * SSD.
+	 *
+	 * Issue reported on Intel, Crucial and Micron SSDs.
+	 * Issue can be detected by S.M.A.R.T. signaling unexpected
+	 * power cuts.
+	 */
+	if (!res && !start)
+		msleep(1000);
+
 	/* SCSI error codes must not go to the generic layer */
 	if (res)
 		return -EIO;
