@@ -51,6 +51,22 @@
 	#address-cells = <1>;
 	#size-cells = <1>;
 
+	chosen {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		simplefb_hdmi: framebuffer@0 {
+			compatible = "allwinner,simple-framebuffer",
+				     "simple-framebuffer";
+			allwinner,pipeline = "de0-lcd1-hdmi";
+			clocks = <&ccu CLK_BUS_TCON1>, <&ccu CLK_BUS_DE>,
+				 <&ccu CLK_BUS_HDMI>, <&ccu CLK_DE>,
+				 <&ccu CLK_TCON1>, <&ccu CLK_HDMI>;
+			status = "disabled";
+		};
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
