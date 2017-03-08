@@ -3570,9 +3570,12 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 {
 	struct list_head *head;
 	struct btrfs_device *dev;
-	int errors_send = 0;
-	int errors_wait = 0;
+	struct extra_rw_degrade_errors *errors;
 	int ret;
+
+	errors = alloc_extra_rw_degrade_errors(info->fs_devices->num_devices);
+	if (!errors)
+		return -ENOMEM;
 
 	/* send down all the barriers */
 	head = &info->fs_devices->devices;
@@ -3580,7 +3583,7 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 		if (dev->missing)
 			continue;
 		if (!dev->bdev) {
-			errors_send++;
+			record_extra_rw_degrade_error(errors, dev->devid);
 			continue;
 		}
 		if (!dev->in_fs_metadata || !dev->writeable)
@@ -3588,7 +3591,7 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 
 		ret = write_dev_flush(dev, 0);
 		if (ret)
-			errors_send++;
+			record_extra_rw_degrade_error(errors, dev->devid);
 	}
 
 	/* wait for all the barriers */
@@ -3596,7 +3599,7 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 		if (dev->missing)
 			continue;
 		if (!dev->bdev) {
-			errors_wait++;
+			record_extra_rw_degrade_error(errors, dev->devid);
 			continue;
 		}
 		if (!dev->in_fs_metadata || !dev->writeable)
@@ -3604,11 +3607,13 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 
 		ret = write_dev_flush(dev, 1);
 		if (ret)
-			errors_wait++;
+			record_extra_rw_degrade_error(errors, dev->devid);
 	}
-	if (errors_send > info->num_tolerated_disk_barrier_failures ||
-	    errors_wait > info->num_tolerated_disk_barrier_failures)
+	if (!btrfs_check_rw_degradable(info, errors)) {
+		kfree(errors);
 		return -EIO;
+	}
+	kfree(errors);
 	return 0;
 }
 
