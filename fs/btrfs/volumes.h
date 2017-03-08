@@ -573,4 +573,6 @@ void record_extra_rw_degrade_error(struct extra_rw_degrade_errors *errors,
 
 bool btrfs_check_rw_degradable(struct btrfs_fs_info *fs_info,
 			       struct extra_rw_degrade_errors *errors);
+void btrfs_report_missing_device(struct btrfs_fs_info *fs_info, u64 devid,
+				 u8 *uuid);
 #endif
