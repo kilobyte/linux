@@ -6765,6 +6765,59 @@ out_short_read:
 	return -EIO;
 }
 
+/*
+ * Check if all chunks in the fs is OK for read-write degraded mount
+ *
+ * Return true if the fs is OK to be mounted degraded read-write
+ * Return false if the fs is not OK to be mounted degraded
+ */
+bool btrfs_check_rw_degradable(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_mapping_tree *map_tree = &fs_info->mapping_tree;
+	struct extent_map *em;
+	u64 next_start = 0;
+	bool ret = true;
+
+	read_lock(&map_tree->map_tree.lock);
+	em = lookup_extent_mapping(&map_tree->map_tree, 0, (u64)-1);
+	/* No chunk at all? Return false anyway */
+	if (!em) {
+		ret = false;
+		goto out;
+	}
+	while (em) {
+		struct map_lookup *map;
+		int missing = 0;
+		int max_tolerated;
+		int i;
+
+		map = (struct map_lookup *) em->bdev;
+		max_tolerated =
+			btrfs_get_num_tolerated_disk_barrier_failures(
+					map->type);
+		for (i = 0; i < map->num_stripes; i++) {
+			if (map->stripes[i].dev->missing)
+				missing++;
+		}
+		if (missing > max_tolerated) {
+			ret = false;
+			btrfs_warn(fs_info,
+	"chunk %llu missing %d devices, max tolerance is %d for writeble mount",
+				   em->start, missing, max_tolerated);
+			free_extent_map(em);
+			goto out;
+		}
+		next_start = extent_map_end(em);
+		free_extent_map(em);
+
+		em = lookup_extent_mapping(&map_tree->map_tree, next_start,
+					   (u64)(-1) - next_start);
+	}
+out:
+	read_unlock(&map_tree->map_tree.lock);
+	return ret;
+}
+
 int btrfs_read_chunk_tree(struct btrfs_fs_info *fs_info)
 {
 	struct btrfs_root *root = fs_info->chunk_root;
