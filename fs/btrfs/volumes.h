@@ -538,5 +538,39 @@ struct list_head *btrfs_get_fs_uuids(void);
 void btrfs_set_fs_info_ptr(struct btrfs_fs_info *fs_info);
 void btrfs_reset_fs_info_ptr(struct btrfs_fs_info *fs_info);
 
-bool btrfs_check_rw_degradable(struct btrfs_fs_info *fs_info);
+/*
+ * For btrfs_check_rw_degradable() to check extra error from
+ * barrier_all_devices()
+ */
+struct rw_degrade_error {
+	u64 devid;
+	bool initialized;
+	bool err;
+};
+
+struct extra_rw_degrade_errors {
+	int nr_devs;
+	spinlock_t lock;
+	struct rw_degrade_error errors[];
+};
+
+static inline struct extra_rw_degrade_errors *alloc_extra_rw_degrade_errors(
+		int nr_devs)
+{
+	struct extra_rw_degrade_errors *ret;
+
+	ret = kzalloc(sizeof(struct extra_rw_degrade_errors) + nr_devs *
+		      sizeof(struct rw_degrade_error), GFP_NOFS);
+	if (!ret)
+		return ret;
+	spin_lock_init(&ret->lock);
+	ret->nr_devs = nr_devs;
+	return ret;
+}
+
+void record_extra_rw_degrade_error(struct extra_rw_degrade_errors *errors,
+				   u64 devid);
+
+bool btrfs_check_rw_degradable(struct btrfs_fs_info *fs_info,
+			       struct extra_rw_degrade_errors *errors);
 #endif

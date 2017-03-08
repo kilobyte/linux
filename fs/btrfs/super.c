@@ -1785,7 +1785,7 @@ static int btrfs_remount(struct super_block *sb, int *flags, char *data)
 		}
 
 		if (!(*flags & MS_RDONLY) &&
-		    !btrfs_check_rw_degradable(fs_info)) {
+		    !btrfs_check_rw_degradable(fs_info, NULL)) {
 			btrfs_warn(fs_info,
 				"too many missing devices, writeable remount is not allowed");
 			ret = -EACCES;

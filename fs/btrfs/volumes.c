@@ -6765,13 +6765,72 @@ out_short_read:
 	return -EIO;
 }
 
+void record_extra_rw_degrade_error(struct extra_rw_degrade_errors *errors,
+				   u64 devid)
+{
+	int i;
+	bool inserted = false;
+
+	if (!errors)
+		return;
+
+	spin_lock(&errors->lock);
+	for (i = 0; i < errors->nr_devs; i++) {
+		struct rw_degrade_error *error = &errors->errors[i];
+
+		if (!error->initialized) {
+			error->devid = devid;
+			error->initialized = true;
+			error->err = true;
+			inserted = true;
+			break;
+		}
+		if (error->devid == devid) {
+			error->err = true;
+			inserted = true;
+			break;
+		}
+	}
+	spin_unlock(&errors->lock);
+	/*
+	 * We iterate all the error records but still found no empty slot
+	 * This means errors->nr_devs is not correct.
+	 */
+	WARN_ON(!inserted);
+}
+
+static bool device_has_rw_degrade_error(struct extra_rw_degrade_errors *errors,
+					u64 devid)
+{
+	int i;
+	bool ret = false;
+
+	if (!errors)
+		return ret;
+
+	spin_lock(&errors->lock);
+	for (i = 0; i < errors->nr_devs; i++) {
+		struct rw_degrade_error *error = &errors->errors[i];
+
+		if (!error->initialized)
+			break;
+		if (error->devid == devid) {
+			ret = true;
+			break;
+		}
+	}
+	spin_unlock(&errors->lock);
+	return ret;
+}
+
 /*
  * Check if all chunks in the fs is OK for read-write degraded mount
  *
  * Return true if the fs is OK to be mounted degraded read-write
  * Return false if the fs is not OK to be mounted degraded
  */
-bool btrfs_check_rw_degradable(struct btrfs_fs_info *fs_info)
+bool btrfs_check_rw_degradable(struct btrfs_fs_info *fs_info,
+			       struct extra_rw_degrade_errors *errors)
 {
 	struct btrfs_mapping_tree *map_tree = &fs_info->mapping_tree;
 	struct extent_map *em;
@@ -6796,7 +6855,10 @@ bool btrfs_check_rw_degradable(struct btrfs_fs_info *fs_info)
 			btrfs_get_num_tolerated_disk_barrier_failures(
 					map->type);
 		for (i = 0; i < map->num_stripes; i++) {
-			if (map->stripes[i].dev->missing)
+			struct btrfs_device *device = map->stripes[i].dev;
+
+			if (device->missing ||
+			    device_has_rw_degrade_error(errors, device->devid))
 				missing++;
 		}
 		if (missing > max_tolerated) {
