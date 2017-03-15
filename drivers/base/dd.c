@@ -1,3 +1,4 @@
+#define DEBUG
 /*
  * drivers/base/dd.c - The core device/driver interactions.
  *
