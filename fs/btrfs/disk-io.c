@@ -3064,6 +3064,8 @@ retry_root_backup:
 	    BTRFS_BLOCK_GROUP_RAID56_MASK) {
 		btrfs_alert(fs_info,
 		"btrfs RAID5/6 is EXPERIMENTAL and has known data-loss bugs");
+	} else {
+		btrfs_clear_fs_incompat(fs_info, RAID56);
 	}
 
 	/*
