@@ -726,6 +726,36 @@ int con_copy_unimap(struct vc_data *dst_vc, struct vc_data *src_vc)
 }
 EXPORT_SYMBOL(con_copy_unimap);
 
+static int fill_unilist(struct unipair *list, struct uni_pagedir *dir, u16 ct)
+{
+	int i, j, k, n;
+
+	if (!dir)
+		return 0;
+
+	for (n = i = 0; i < 32; i++) {
+		u16 **p1 = dir->uni_pgdir[i];
+		if (!p1)
+			continue;
+		for (j = 0; j < 32; j++) {
+			u16 *p2 = p1[j];
+			if (!p2)
+				continue;
+			for (k = 0; k < 64; k++) {
+				u16 pos = p2[k];
+				if (pos >= MAX_GLYPH)
+					continue;
+				if (unlikely(n == ct))
+					return -1;
+				list[n].unicode = (i<<11) + (j<<6) + k;
+				list[n].fontpos = pos;
+				n++;
+			}
+		}
+	}
+	return n;
+}
+
 /**
  *	con_get_unimap		-	get the unicode map
  *	@vc: the console to read from
@@ -735,46 +765,29 @@ EXPORT_SYMBOL(con_copy_unimap);
  */
 int con_get_unimap(struct vc_data *vc, ushort ct, ushort __user *uct, struct unipair __user *list)
 {
-	int i, j, k, ret = 0;
-	ushort ect;
-	u16 **p1, *p2;
-	struct uni_pagedir *p;
 	struct unipair *unilist;
+	ushort ect;
+	int n, ret = 0;
 
 	unilist = kmalloc_array(ct, sizeof(struct unipair), GFP_KERNEL);
 	if (!unilist)
 		return -ENOMEM;
 
 	console_lock();
-
-	ect = 0;
-	if (*vc->vc_uni_pagedir_loc) {
-		p = *vc->vc_uni_pagedir_loc;
-		for (i = 0; i < 32; i++) {
-		p1 = p->uni_pgdir[i];
-		if (p1)
-			for (j = 0; j < 32; j++) {
-			p2 = *(p1++);
-			if (p2)
-				for (k = 0; k < 64; k++, p2++) {
-					if (*p2 >= MAX_GLYPH)
-						continue;
-					if (ect < ct) {
-						unilist[ect].unicode =
-							(i<<11)+(j<<6)+k;
-						unilist[ect].fontpos = *p2;
-					}
-					ect++;
-				}
-			}
-		}
-	}
+	n = fill_unilist(unilist, *vc->vc_uni_pagedir_loc, ct);
 	console_unlock();
-	if (copy_to_user(list, unilist, min(ect, ct) * sizeof(struct unipair)))
+	if (n < 0) {
+		ect = ct;
+		ret = -ENOMEM;
+	} else {
+		ect = n;
+		ret = 0;
+	}
+	if (copy_to_user(list, unilist, ect * sizeof(struct unipair)) ||
+	    put_user(ect, uct))
 		ret = -EFAULT;
-	put_user(ect, uct);
 	kfree(unilist);
-	return ret ? ret : (ect <= ct) ? 0 : -ENOMEM;
+	return ret;
 }
 
 /*
