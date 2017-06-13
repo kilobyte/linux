@@ -3574,7 +3574,6 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 {
 	struct list_head *head;
 	struct btrfs_device *dev;
-	int errors_send = 0;
 	int errors_wait = 0;
 	int ret;
 
@@ -3583,10 +3582,8 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 	list_for_each_entry_rcu(dev, head, dev_list) {
 		if (dev->missing)
 			continue;
-		if (!dev->bdev) {
-			errors_send++;
+		if (!dev->bdev)
 			continue;
-		}
 		if (!dev->in_fs_metadata || !dev->writeable)
 			continue;
 
@@ -3612,7 +3609,7 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 		}
 	}
 
-	if (errors_send || errors_wait) {
+	if (errors_wait) {
 		/*
 		 * At some point we need the status of all disks
 		 * to arrive at the volume status. So error checking
