@@ -3522,7 +3522,6 @@ static void write_dev_flush(struct btrfs_device *device)
  */
 static int wait_dev_flush(struct btrfs_device *device)
 {
-	int ret = 0;
 	struct bio *bio = device->flush_bio;
 
 	if (!device->flush_bio_sent)
@@ -3531,13 +3530,7 @@ static int wait_dev_flush(struct btrfs_device *device)
 	device->flush_bio_sent = 0;
 	wait_for_completion_io(&device->flush_wait);
 
-	if (bio->bi_error) {
-		ret = bio->bi_error;
-		btrfs_dev_stat_inc_and_print(device,
-				BTRFS_DEV_STAT_FLUSH_ERRS);
-	}
-
-	return ret;
+	return bio->bi_error;
 }
 
 static int check_barrier_error(struct btrfs_fs_devices *fsdevs)
@@ -3596,6 +3589,8 @@ static int barrier_all_devices(struct btrfs_fs_info *info)
 		ret = wait_dev_flush(dev);
 		if (ret) {
 			dev->last_flush_error = ret;
+			btrfs_dev_stat_inc_and_print(dev,
+					BTRFS_DEV_STAT_FLUSH_ERRS);
 			errors_wait++;
 		}
 	}
