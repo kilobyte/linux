@@ -3529,7 +3529,7 @@ static int wait_dev_flush(struct btrfs_device *device)
 		return 0;
 
 	device->flush_bio_sent = 0;
-	wait_for_completion(&device->flush_wait);
+	wait_for_completion_io(&device->flush_wait);
 
 	if (bio->bi_error) {
 		ret = bio->bi_error;
