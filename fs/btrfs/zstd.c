@@ -25,6 +25,7 @@
 #include <linux/pagemap.h>
 #include <linux/bio.h>
 #include <linux/zstd.h>
+#include <linux/refcount.h>
 #include "compression.h"
 
 #define ZSTD_BTRFS_MAX_WINDOWLOG 17
@@ -262,17 +263,18 @@ out:
 	return ret;
 }
 
-static int zstd_decompress_bio(struct list_head *ws, struct page **pages_in,
-		u64 disk_start,
-		struct bio *orig_bio,
-		size_t srclen)
+static int zstd_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 {
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	ZSTD_DStream *stream;
 	int ret = 0;
 	unsigned long page_in_index = 0;
+	size_t srclen = cb->compressed_len;
 	unsigned long total_pages_in = DIV_ROUND_UP(srclen, PAGE_SIZE);
 	unsigned long buf_start;
+	struct page **pages_in = cb->compressed_pages;
+	u64 disk_start = cb->start;
+	struct bio *orig_bio = cb->orig_bio;
 	unsigned long total_out = 0;
 	ZSTD_inBuffer in_buf = { NULL, 0, 0 };
 	ZSTD_outBuffer out_buf = { NULL, 0, 0 };
