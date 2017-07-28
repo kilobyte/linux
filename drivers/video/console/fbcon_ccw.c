@@ -191,6 +191,7 @@ static void ccw_putcs(struct vc_data *vc, struct fb_info *info,
 static void ccw_clear_margins(struct vc_data *vc, struct fb_info *info,
 			     int bottom_only)
 {
+	int bgshift = (vc->vc_hi_font_mask) ? 13 : 12;
 	unsigned int cw = vc->vc_font.width;
 	unsigned int ch = vc->vc_font.height;
 	unsigned int rw = info->var.yres - (vc->vc_cols*cw);
@@ -198,7 +199,7 @@ static void ccw_clear_margins(struct vc_data *vc, struct fb_info *info,
 	unsigned int bs = vc->vc_rows*ch;
 	struct fb_fillrect region;
 
-	region.color = 0;
+	region.color = attr_bgcol_ec(bgshift, vc, info);
 	region.rop = ROP_COPY;
 
 	if (rw && !bottom_only) {
