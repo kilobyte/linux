@@ -1112,6 +1112,8 @@ unsigned int btrfs_compress_str2level(const char *str)
 
 	if ('1' <= str[4] && str[4] <= '9' )
 		return str[4] - '0';
+	if (str[4] == ':' && '1' <= str[5] && str[5] <= '9')
+		return str[5] - '0';
 
 	return 0;
 }
