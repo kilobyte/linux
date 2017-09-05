@@ -38,6 +38,8 @@
 #include <asm/fpsimd.h>
 #include <asm/signal32.h>
 #include <asm/vdso.h>
+#include <asm/signal_common.h>
+#include <asm/signal_ilp32.h>
 
 /*
  * Do a signal return; undo the signal stack. These are aligned to 128-bit.
@@ -45,11 +47,6 @@
 struct rt_sigframe {
 	struct siginfo info;
 	struct ucontext uc;
-};
-
-struct frame_record {
-	u64 fp;
-	u64 lr;
 };
 
 struct rt_sigframe_user_layout {
@@ -66,8 +63,6 @@ struct rt_sigframe_user_layout {
 };
 
 #define BASE_SIGFRAME_SIZE round_up(sizeof(struct rt_sigframe), 16)
-#define TERMINATOR_SIZE round_up(sizeof(struct _aarch64_ctx), 16)
-#define EXTRA_CONTEXT_SIZE round_up(sizeof(struct extra_context), 16)
 
 static void init_user_layout(struct rt_sigframe_user_layout *user)
 {
@@ -88,14 +83,6 @@ static size_t sigframe_size(struct rt_sigframe_user_layout const *user)
 {
 	return round_up(max(user->size, sizeof(struct rt_sigframe)), 16);
 }
-
-/*
- * Sanity limit on the approximate maximum size of signal frame we'll
- * try to generate.  Stack alignment padding and the frame record are
- * not taken into account.  This limit is not a guarantee and is
- * NOT ABI.
- */
-#define SIGFRAME_MAXSZ SZ_64K
 
 static int __sigframe_alloc(struct rt_sigframe_user_layout *user,
 			    unsigned long *offset, size_t size, bool extend)
@@ -172,7 +159,7 @@ static void __user *apply_user_offset(
 	return base + offset;
 }
 
-static int preserve_fpsimd_context(struct fpsimd_context __user *ctx)
+int preserve_fpsimd_context(struct fpsimd_context __user *ctx)
 {
 	struct fpsimd_state *fpsimd = &current->thread.fpsimd_state;
 	int err;
@@ -192,7 +179,7 @@ static int preserve_fpsimd_context(struct fpsimd_context __user *ctx)
 	return err ? -EFAULT : 0;
 }
 
-static int restore_fpsimd_context(struct fpsimd_context __user *ctx)
+int restore_fpsimd_context(struct fpsimd_context __user *ctx)
 {
 	struct fpsimd_state fpsimd;
 	__u32 magic, size;
@@ -219,20 +206,16 @@ static int restore_fpsimd_context(struct fpsimd_context __user *ctx)
 	return err ? -EFAULT : 0;
 }
 
-struct user_ctxs {
-	struct fpsimd_context __user *fpsimd;
-};
-
-static int parse_user_sigframe(struct user_ctxs *user,
-			       struct rt_sigframe __user *sf)
+int __parse_user_sigcontext(struct user_ctxs *user,
+				   struct sigcontext __user const *sc,
+				   void __user const *sigframe_base)
 {
-	struct sigcontext __user *const sc = &sf->uc.uc_mcontext;
 	struct _aarch64_ctx __user *head;
 	char __user *base = (char __user *)&sc->__reserved;
 	size_t offset = 0;
 	size_t limit = sizeof(sc->__reserved);
 	bool have_extra_context = false;
-	char const __user *const sfp = (char const __user *)sf;
+	char const __user *const sfp = (char const __user *)sigframe_base;
 
 	user->fpsimd = NULL;
 
@@ -391,7 +374,7 @@ static int restore_sigframe(struct pt_regs *regs,
 
 	err |= !valid_user_regs(&regs->user_regs, current);
 	if (err == 0)
-		err = parse_user_sigframe(&user, sf);
+		err = parse_user_sigcontext(&user, sf);
 
 	if (err == 0)
 		err = restore_fpsimd_context(user.fpsimd);
@@ -456,6 +439,39 @@ static int setup_sigframe_layout(struct rt_sigframe_user_layout *user)
 	return sigframe_alloc_end(user);
 }
 
+int setup_extra_context(char __user *sfp, unsigned long users, char __user *userp)
+{
+	int err =0;
+	struct extra_context __user *extra;
+	struct _aarch64_ctx __user *end;
+	u64 extra_datap;
+	u32 extra_size;
+
+	extra = (struct extra_context __user *)userp;
+	userp += EXTRA_CONTEXT_SIZE;
+
+	end = (struct _aarch64_ctx __user *)userp;
+	userp += TERMINATOR_SIZE;
+
+	/*
+	 * extra_datap is just written to the signal frame.
+	 * The value gets cast back to a void __user *
+	 * during sigreturn.
+	 */
+	extra_datap = (__force u64)userp;
+	extra_size = sfp + round_up(users, 16) - userp;
+
+	__put_user_error(EXTRA_MAGIC, &extra->head.magic, err);
+	__put_user_error(EXTRA_CONTEXT_SIZE, &extra->head.size, err);
+	__put_user_error(extra_datap, &extra->datap, err);
+	__put_user_error(extra_size, &extra->size, err);
+
+	/* Add the terminator */
+	__put_user_error(0, &end->magic, err);
+	__put_user_error(0, &end->size, err);
+
+	return err;
+}
 
 static int setup_sigframe(struct rt_sigframe_user_layout *user,
 			  struct pt_regs *regs, sigset_t *set)
@@ -494,39 +510,9 @@ static int setup_sigframe(struct rt_sigframe_user_layout *user,
 		__put_user_error(current->thread.fault_code, &esr_ctx->esr, err);
 	}
 
-	if (err == 0 && user->extra_offset) {
-		char __user *sfp = (char __user *)user->sigframe;
-		char __user *userp =
-			apply_user_offset(user, user->extra_offset);
-
-		struct extra_context __user *extra;
-		struct _aarch64_ctx __user *end;
-		u64 extra_datap;
-		u32 extra_size;
-
-		extra = (struct extra_context __user *)userp;
-		userp += EXTRA_CONTEXT_SIZE;
-
-		end = (struct _aarch64_ctx __user *)userp;
-		userp += TERMINATOR_SIZE;
-
-		/*
-		 * extra_datap is just written to the signal frame.
-		 * The value gets cast back to a void __user *
-		 * during sigreturn.
-		 */
-		extra_datap = (__force u64)userp;
-		extra_size = sfp + round_up(user->size, 16) - userp;
-
-		__put_user_error(EXTRA_MAGIC, &extra->head.magic, err);
-		__put_user_error(EXTRA_CONTEXT_SIZE, &extra->head.size, err);
-		__put_user_error(extra_datap, &extra->datap, err);
-		__put_user_error(extra_size, &extra->size, err);
-
-		/* Add the terminator */
-		__put_user_error(0, &end->magic, err);
-		__put_user_error(0, &end->size, err);
-	}
+	if (err == 0 && user->extra_offset)
+		setup_extra_context((char *) user->sigframe, user->size,
+			(char *) apply_user_offset(user, user->extra_offset));
 
 	/* set the "end" magic */
 	if (err == 0) {
@@ -580,6 +566,8 @@ static void setup_return(struct pt_regs *regs, struct k_sigaction *ka,
 
 	if (ka->sa.sa_flags & SA_RESTORER)
 		sigtramp = ka->sa.sa_restorer;
+	else if (is_ilp32_compat_task())
+		sigtramp = VDSO_SYMBOL(current->mm->context.vdso, sigtramp_ilp32);
 	else
 		sigtramp = VDSO_SYMBOL(current->mm->context.vdso, sigtramp);
 
@@ -617,8 +605,8 @@ static int setup_rt_frame(int usig, struct ksignal *ksig, sigset_t *set,
 
 static void setup_restart_syscall(struct pt_regs *regs)
 {
-	if (is_compat_task())
-		compat_setup_restart_syscall(regs);
+	if (is_a32_compat_task())
+		a32_setup_restart_syscall(regs);
 	else
 		regs->regs[8] = __NR_restart_syscall;
 }
@@ -636,11 +624,13 @@ static void handle_signal(struct ksignal *ksig, struct pt_regs *regs)
 	/*
 	 * Set up the stack frame
 	 */
-	if (is_compat_task()) {
+	if (is_a32_compat_task()) {
 		if (ksig->ka.sa.sa_flags & SA_SIGINFO)
-			ret = compat_setup_rt_frame(usig, ksig, oldset, regs);
+			ret = a32_setup_rt_frame(usig, ksig, oldset, regs);
 		else
-			ret = compat_setup_frame(usig, ksig, oldset, regs);
+			ret = a32_setup_frame(usig, ksig, oldset, regs);
+	} else if (is_ilp32_compat_task()) {
+		ret = ilp32_setup_rt_frame(usig, ksig, oldset, regs);
 	} else {
 		ret = setup_rt_frame(usig, ksig, oldset, regs);
 	}
@@ -681,7 +671,7 @@ static void do_signal(struct pt_regs *regs)
 	 */
 	if (syscall >= 0) {
 		continue_addr = regs->pc;
-		restart_addr = continue_addr - (compat_thumb_mode(regs) ? 2 : 4);
+		restart_addr = continue_addr - (a32_thumb_mode(regs) ? 2 : 4);
 		retval = regs->regs[0];
 
 		/*

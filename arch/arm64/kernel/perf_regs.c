@@ -18,7 +18,7 @@ u64 perf_reg_value(struct pt_regs *regs, int idx)
 	 * - PC has been set in the pt_regs struct in kernel_entry,
 	 * - Handle SP and LR here.
 	 */
-	if (compat_user_mode(regs)) {
+	if (a32_user_mode(regs)) {
 		if ((u32)idx == PERF_REG_ARM64_SP)
 			return regs->compat_sp;
 		if ((u32)idx == PERF_REG_ARM64_LR)
@@ -46,7 +46,7 @@ int perf_reg_validate(u64 mask)
 
 u64 perf_reg_abi(struct task_struct *task)
 {
-	if (is_compat_thread(task_thread_info(task)))
+	if (is_a32_compat_thread(task_thread_info(task)))
 		return PERF_SAMPLE_REGS_ABI_32;
 	else
 		return PERF_SAMPLE_REGS_ABI_64;
