@@ -2957,6 +2957,18 @@ static int may_delete(struct mnt_idmap *idmap, struct inode *dir,
 	return 0;
 }
 
+/*	Check for banned characters in file name.  Called only on creation, as
+ * we need to allow removal/renaming/reading of existing stuff.
+ */
+static int is_bad_name(const char *name)
+{
+	const char *c;
+	for (c = name; *c; c++)
+		if ((1 <= *c && *c <= 31) || *c == 127)
+			return 1;
+	return 0;
+}
+
 /*	Check whether we can create an object with dentry child in directory
  *  dir.
  *  1. We can't do it if child already exists (open has special treatment for
@@ -2974,6 +2986,8 @@ static inline int may_create(struct mnt_idmap *idmap,
 		return -EEXIST;
 	if (IS_DEADDIR(dir))
 		return -ENOENT;
+	if (is_bad_name(child->d_name.name))
+		return -EACCES;
 	if (!fsuidgid_has_mapping(dir->i_sb, idmap))
 		return -EOVERFLOW;
 
@@ -3239,6 +3253,8 @@ static int may_o_create(struct mnt_idmap *idmap,
 	if (error)
 		return error;
 
+	if (is_bad_name(dentry->d_name.name))
+		return -EACCES;
 	if (!fsuidgid_has_mapping(dir->dentry->d_sb, idmap))
 		return -EOVERFLOW;
 
