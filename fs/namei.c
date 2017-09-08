@@ -2809,6 +2809,17 @@ static int may_delete(struct inode *dir, struct dentry *victim, bool isdir)
 	return 0;
 }
 
+/*	Check for banned characters in file name.  Called only on creation, as
+ * we need to allow removal/renaming/reading of existing stuff.
+ */
+static int is_bad_name(const unsigned char *name)
+{
+	for (; *name; name++)
+		if ((1 <= *name && *name <= 31) || *name == 127)
+			return 1;
+	return 0;
+}
+
 /*	Check whether we can create an object with dentry child in directory
  *  dir.
  *  1. We can't do it if child already exists (open has special treatment for
@@ -2826,6 +2837,8 @@ static inline int may_create(struct inode *dir, struct dentry *child)
 		return -EEXIST;
 	if (IS_DEADDIR(dir))
 		return -ENOENT;
+	if (is_bad_name(child->d_name.name))
+		return -EACCES;
 	s_user_ns = dir->i_sb->s_user_ns;
 	if (!kuid_has_mapping(s_user_ns, current_fsuid()) ||
 	    !kgid_has_mapping(s_user_ns, current_fsgid()))
@@ -2987,6 +3000,9 @@ static int may_o_create(const struct path *dir, struct dentry *dentry, umode_t m
 	int error = security_path_mknod(dir, dentry, mode, 0);
 	if (error)
 		return error;
+
+	if (is_bad_name(dentry->d_name.name))
+		return -EACCES;
 
 	s_user_ns = dir->dentry->d_sb->s_user_ns;
 	if (!kuid_has_mapping(s_user_ns, current_fsuid()) ||
