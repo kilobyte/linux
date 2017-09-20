@@ -19,7 +19,7 @@ if NLS
 
 config NLS_DEFAULT
 	string "Default NLS Option"
-	default "iso8859-1"
+	default "utf8"
 	---help---
 	  The default NLS used when mounting file system. Note, that this is
 	  the NLS used by your console, not the NLS used by a specific file
@@ -34,7 +34,7 @@ config NLS_DEFAULT
 	  If you specify a wrong value, it will use the built-in NLS;
 	  compatible with iso8859-1.
 
-	  If unsure, specify it as "iso8859-1".
+	  If unsure, specify it as "utf-8".
 
 config NLS_CODEPAGE_437
 	tristate "Codepage 437 (United States, Canada)"
