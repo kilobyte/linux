@@ -39,13 +39,19 @@ obj-$(CONFIG_SLIC_DS26522)	+= slic_ds26522.o
 clean-files := wanxlfw.inc
 $(obj)/wanxl.o:	$(obj)/wanxlfw.inc
 
+HAVE_GNU_M68K_AS := $(shell command -v m68k-linux-gnu-as 2> /dev/null)
 ifeq ($(CONFIG_WANXL_BUILD_FIRMWARE),y)
 ifeq ($(ARCH),m68k)
   AS68K = $(AS)
   LD68K = $(LD)
 else
+ifdef HAVE_GNU_M68K_AS
+  AS68K = m68k-linux-gnu-as
+  LD68K = m68k-linux-gnu-ld
+else
   AS68K = as68k
   LD68K = ld68k
+endif
 endif
 
 quiet_cmd_build_wanxlfw = BLD FW  $@
