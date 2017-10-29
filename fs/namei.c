@@ -2834,7 +2834,7 @@ static int is_bad_name(const char *name)
 {
 	const char *c;
 	for (c = name; *c; c++)
-		if ((1 <= *c && *c <= 31) || *c == 127)
+		if (1 <= *c && *c <= 31)
 			return 1;
 	return 0;
 }
