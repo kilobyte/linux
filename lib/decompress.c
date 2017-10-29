@@ -69,7 +69,9 @@ decompress_fn __init decompress_method(const unsigned char *inbuf, long len,
 			break;
 
 	}
-	if (name)
+	if (name) {
 		*name = cf->name;
+		printk("Decompressing using %s.\n", *name);
+	}
 	return cf->decompressor;
 }
