@@ -2835,7 +2835,10 @@ static int is_bad_name(const char *name)
 	const char *c;
 	for (c = name; *c; c++)
 		if (1 <= *c && *c <= 31)
+		{
+			printk("bad file name: [%*pEhp]", strlen(name), name);
 			return 1;
+		}
 	return 0;
 }
 
