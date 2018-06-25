@@ -122,6 +122,7 @@ struct vc_data {
 	unsigned int	vc_ques		: 1;
 	unsigned int	vc_need_wrap	: 1;
 	unsigned int	vc_can_do_color	: 1;
+	unsigned int	vc_unblinking   : 1;	/* shows bright bg for blink */
 	unsigned int	vc_report_mouse : 2;
 	unsigned char	vc_utf		: 1;	/* Unicode UTF-8 encoding */
 	unsigned char	vc_utf_count;
