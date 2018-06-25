@@ -1762,6 +1762,8 @@ static void csi_m(struct vc_data *vc)
 			if (vc->vc_par[i] >= 90 && vc->vc_par[i] <= 107) {
 				if (vc->vc_par[i] < 100)
 					vc->state.intensity = VCI_BOLD;
+				else if (vc->vc_unblinking)
+					vc->state.blink = true;
 				vc->vc_par[i] -= 60;
 			}
 			if (vc->vc_par[i] >= 30 && vc->vc_par[i] <= 37)
