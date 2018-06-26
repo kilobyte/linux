@@ -1590,9 +1590,12 @@ static void rgb_from_256(int i, struct rgb *c)
 		c->g = i&2 ? 0xff : 0x55;
 		c->b = i&4 ? 0xff : 0x55;
 	} else if (i < 232) {   /* 6x6x6 colour cube. */
-		c->r = (i - 16) / 36 * 85 / 2;
-		c->g = (i - 16) / 6 % 6 * 85 / 2;
-		c->b = (i - 16) % 6 * 85 / 2;
+		int r = (i - 16) / 36;
+		int g = (i - 16) / 6 % 6;
+		int b = (i - 16) % 6;
+		c->r = r ? r * 0x28 + 0x37 : 0;
+		c->g = g ? g * 0x28 + 0x37 : 0;
+		c->b = b ? b * 0x28 + 0x37 : 0;
 	} else                  /* Grayscale ramp. */
 		c->r = c->g = c->b = i * 10 - 2312;
 }
