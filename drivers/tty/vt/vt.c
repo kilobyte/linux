@@ -1610,7 +1610,7 @@ static void rgb_from_256(int i, struct rgb *c)
 		c->r = c->g = c->b = i * 10 - 2312;
 }
 
-static void rgb_foreground(struct vc_data *vc, const struct rgb *c)
+static u8 rgb_to_16(const struct rgb *c)
 {
 	u8 hue = 0, max = max3(c->r, c->g, c->b);
 
@@ -1621,22 +1621,12 @@ static void rgb_foreground(struct vc_data *vc, const struct rgb *c)
 	if (c->b > max / 2 + 32)
 		hue |= 1;
 
-	if (hue == 7 && max <= 0x70) {
-		hue = 0;
-		vc->state.intensity = VCI_BOLD;
-	} else if (max > 0xc0)
-		vc->state.intensity = VCI_BOLD;
+	if (hue == 7 && max <= 0x70)
+		return 8;
+	if (max > 0xc0)
+		return hue | 8;
 	else
-		vc->state.intensity = VCI_NORMAL;
-
-	vc->state.color = (vc->state.color & 0xf0) | hue;
-}
-
-static void rgb_background(struct vc_data *vc, const struct rgb *c)
-{
-	/* For backgrounds, err on the dark side. */
-	vc->state.color = (vc->state.color & 0x0f)
-		| (c->r&0x80) >> 1 | (c->g&0x80) >> 2 | (c->b&0x80) >> 3;
+		return hue;
 }
 
 /*
@@ -1648,10 +1638,10 @@ static void rgb_background(struct vc_data *vc, const struct rgb *c)
  * Subcommands 3 (CMY) and 4 (CMYK) are so insane there's no point in
  * supporting them.
  */
-static int vc_t416_color(struct vc_data *vc, int i,
-		void(*set_color)(struct vc_data *vc, const struct rgb *c))
+static int vc_t416_color(struct vc_data *vc, int i, int bgshift)
 {
 	struct rgb c;
+	u8 v;
 
 	i++;
 	if (i > vc->vc_npar)
@@ -1670,7 +1660,13 @@ static int vc_t416_color(struct vc_data *vc, int i,
 	} else
 		return i;
 
-	set_color(vc, &c);
+	v = rgb_to_16(&c);
+
+	vc->state.color = (vc->state.color & (0xf0 >> bgshift)) | v << bgshift;
+	if (!bgshift)
+		vc->state.intensity = (v & 8 >> 4) + 1;
+	else if (vc->vc_unblinking)
+		vc->state.blink = v & 8 >> 4;
 
 	return i;
 }
@@ -1748,10 +1744,10 @@ static void csi_m(struct vc_data *vc)
 			vc->state.reverse = false;
 			break;
 		case 38:
-			i = vc_t416_color(vc, i, rgb_foreground);
+			i = vc_t416_color(vc, i, 0);
 			break;
 		case 48:
-			i = vc_t416_color(vc, i, rgb_background);
+			i = vc_t416_color(vc, i, 4);
 			break;
 		case 39:
 			vc->state.color = (vc->vc_def_color & 0x0f) |
