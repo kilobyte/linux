@@ -1604,17 +1604,17 @@ static void rgb_foreground(struct vc_data *vc, const struct rgb *c)
 {
 	u8 hue = 0, max = max3(c->r, c->g, c->b);
 
-	if (c->r > max / 2)
+	if (c->r > max / 2 + 32)
 		hue |= 4;
-	if (c->g > max / 2)
+	if (c->g > max / 2 + 32)
 		hue |= 2;
-	if (c->b > max / 2)
+	if (c->b > max / 2 + 32)
 		hue |= 1;
 
-	if (hue == 7 && max <= 0x55) {
+	if (hue == 7 && max <= 0x70) {
 		hue = 0;
 		vc->vc_intensity = 2;
-	} else if (max > 0xaa)
+	} else if (max > 0xc0)
 		vc->vc_intensity = 2;
 	else
 		vc->vc_intensity = 1;
