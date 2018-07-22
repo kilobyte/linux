@@ -104,7 +104,7 @@
 #include <linux/kdb.h>
 #include <linux/ctype.h>
 #include <linux/bsearch.h>
-#include <linux/gcd.h>
+#include <linux/gcd.h> // TODO: fix vc_uniscr_scroll
 
 #define MAX_NR_CON_DRIVER 16
 
