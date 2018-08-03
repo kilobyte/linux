@@ -22,7 +22,6 @@ $(obj)/font.c: $(srctree)/lib/fonts/font_8x8.c
 
 # piggy.S and piggy.o
 suffix_$(CONFIG_KERNEL_GZIP)	:= gzip
-suffix_$(CONFIG_KERNEL_BZIP2)	:= bz2
 suffix_$(CONFIG_KERNEL_LZO)	:= lzo
 suffix_$(CONFIG_KERNEL_LZMA)	:= lzma
 
@@ -39,7 +38,7 @@ targets		:= vmlinux vmlinux.lds font.o font.c head.o misc.o \
 			piggy.$(suffix_y) piggy.o piggy.S \
 
 # Make sure files are removed during clean
-extra-y		+= piggy.gzip piggy.bz2 piggy.lzo piggy.lzma
+extra-y		+= piggy.gzip piggy.lzo piggy.lzma
 
 # ?
 LDFLAGS_vmlinux += -p
