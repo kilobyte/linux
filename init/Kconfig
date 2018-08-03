@@ -119,9 +119,6 @@ config BUILD_SALT
 config HAVE_KERNEL_GZIP
 	bool
 
-config HAVE_KERNEL_BZIP2
-	bool
-
 config HAVE_KERNEL_LZMA
 	bool
 
@@ -143,7 +140,7 @@ config HAVE_KERNEL_UNCOMPRESSED
 choice
 	prompt "Kernel compression mode"
 	default KERNEL_GZIP
-	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_BZIP2 || HAVE_KERNEL_LZMA || HAVE_KERNEL_XZ || HAVE_KERNEL_LZO || HAVE_KERNEL_LZ4 || HAVE_KERNEL_ZSTD || HAVE_KERNEL_UNCOMPRESSED
+	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_LZMA || HAVE_KERNEL_XZ || HAVE_KERNEL_LZO || HAVE_KERNEL_LZ4 || HAVE_KERNEL_ZSTD || HAVE_KERNEL_UNCOMPRESSED
 	help
 	  The linux kernel is a kind of self-extracting executable.
 	  Several compression algorithms are available, which differ
@@ -151,7 +148,7 @@ choice
 	  Compression speed is only relevant when building a kernel.
 	  Decompression speed is relevant at each boot.
 
-	  If you have any problems with bzip2 or lzma compressed
+	  If you have any problems with lzma compressed
 	  kernels, mail me (Alain Knaff) <alain@knaff.lu>. (An older
 	  version of this functionality (bzip2 only), for 2.4, was
 	  supplied by Christian Ludwig)
@@ -168,16 +165,6 @@ config KERNEL_GZIP
 	help
 	  The old and tried gzip compression. It provides a good balance
 	  between compression ratio and decompression speed.
-
-config KERNEL_BZIP2
-	bool "Bzip2"
-	depends on HAVE_KERNEL_BZIP2
-	help
-	  Its compression ratio and speed is intermediate.
-	  Decompression speed is slowest among the choices.  The kernel
-	  size is about 10% smaller with bzip2, in comparison to gzip.
-	  Bzip2 uses a large amount of memory. For modern kernels you
-	  will need at least 8MB RAM or more for booting.
 
 config KERNEL_LZMA
 	bool "LZMA"
