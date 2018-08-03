@@ -286,9 +286,6 @@ config DECOMPRESS_GZIP
 	select ZLIB_INFLATE
 	tristate
 
-config DECOMPRESS_BZIP2
-	tristate
-
 config DECOMPRESS_LZMA
 	tristate
 
