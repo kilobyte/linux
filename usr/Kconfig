@@ -61,15 +61,6 @@ config RD_GZIP
 	  Support loading of a gzip encoded initial ramdisk or cpio buffer.
 	  If unsure, say Y.
 
-config RD_BZIP2
-	bool "Support initial ramdisk/ramfs compressed using bzip2"
-	default y
-	depends on BLK_DEV_INITRD
-	select DECOMPRESS_BZIP2
-	help
-	  Support loading of a bzip2 encoded initial ramdisk or cpio buffer
-	  If unsure, say N.
-
 config RD_LZMA
 	bool "Support initial ramdisk/ramfs compressed using LZMA"
 	default y
@@ -161,19 +152,6 @@ config INITRAMFS_COMPRESSION_GZIP
 	  supported by your build system as the gzip tool is present by default
 	  on most distros.
 
-config INITRAMFS_COMPRESSION_BZIP2
-	bool "Bzip2"
-	depends on RD_BZIP2
-	help
-	  It's compression ratio and speed is intermediate. Decompression speed
-	  is slowest among the choices. The initramfs size is about 10% smaller
-	  with bzip2, in comparison to gzip. Bzip2 uses a large amount of
-	  memory. For modern kernels you will need at least 8MB RAM or more for
-	  booting.
-
-	  If you choose this, keep in mind that you need to have the bzip2 tool
-	  available to be able to compress the initram.
-
 config INITRAMFS_COMPRESSION_LZMA
 	bool "LZMA"
 	depends on RD_LZMA
@@ -241,7 +219,6 @@ config INITRAMFS_COMPRESSION
 	string
 	default ""      if INITRAMFS_COMPRESSION_NONE
 	default ".gz"   if INITRAMFS_COMPRESSION_GZIP
-	default ".bz2"  if INITRAMFS_COMPRESSION_BZIP2
 	default ".lzma" if INITRAMFS_COMPRESSION_LZMA
 	default ".xz"   if INITRAMFS_COMPRESSION_XZ
 	default ".lzo"  if INITRAMFS_COMPRESSION_LZO
@@ -252,6 +229,5 @@ config INITRAMFS_COMPRESSION
 	default ".lzo"  if RD_LZO
 	default ".xz"   if RD_XZ
 	default ".lzma" if RD_LZMA
-	default ".bz2"  if RD_BZIP2
 	default ".zst"  if RD_ZSTD
 	default ""
