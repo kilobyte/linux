@@ -35,18 +35,10 @@ static void error(char *m);
 static unsigned long free_mem_ptr;
 static unsigned long free_mem_end_ptr;
 
-#ifdef CONFIG_HAVE_KERNEL_BZIP2
-#define HEAP_SIZE	0x400000
-#else
 #define HEAP_SIZE	0x10000
-#endif
 
 #ifdef CONFIG_KERNEL_GZIP
 #include "../../../../lib/decompress_inflate.c"
-#endif
-
-#ifdef CONFIG_KERNEL_BZIP2
-#include "../../../../lib/decompress_bunzip2.c"
 #endif
 
 #ifdef CONFIG_KERNEL_LZ4
