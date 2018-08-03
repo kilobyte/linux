@@ -131,17 +131,15 @@ config INITRAMFS_COMPRESSION_NONE
 	  on those architectures that support this. However, not compressing the
 	  initramfs may lead to slightly higher memory consumption during a
 	  short time at boot, while both the cpio image and the unpacked
-	  filesystem image will be present in memory simultaneously
+	  filesystem image will be present in memory simultaneously.
 
 config INITRAMFS_COMPRESSION_GZIP
 	bool "Gzip"
 	depends on RD_GZIP
 	help
-	  Use the old and well tested gzip compression algorithm. Gzip provides
-	  a good balance between compression ratio and decompression speed and
-	  has a reasonable compression speed. It is also more likely to be
-	  supported by your build system as the gzip tool is present by default
-	  on most distros.
+	  Use the old and well tested gzip compression algorithm. Gzip doesn't
+	  provide very good compression nor speed, but it's the safest choice,
+	  with wide support.
 
 config INITRAMFS_COMPRESSION_XZ
 	bool "XZ"
@@ -150,20 +148,20 @@ config INITRAMFS_COMPRESSION_XZ
 	  XZ uses the LZMA2 algorithm and has a large dictionary which may cause
 	  problems on memory constrained systems. The initramfs size is about
 	  30% smaller with XZ in comparison to gzip. Decompression speed is
-	  better than that of bzip2 but worse than gzip and LZO. Compression is
-	  slow.
+	  okayish but still slowest of all currently available algorithms.
+	  Compression is slow.
 
-	  If you choose this, keep in mind that you may need to install the xz
-	  tool to be able to compress the initram.
+	  Any modern distro provides xz in its default install, but on
+	  minimal build systems you might need to install xz-utils to be
+	  able to compress the initram.
 
 config INITRAMFS_COMPRESSION_LZO
 	bool "LZO"
 	depends on RD_LZO
 	help
 	  It's compression ratio is the second poorest amongst the choices. The
-	  kernel size is about 10% bigger than gzip. Despite that, it's
-	  decompression speed is the second fastest and it's compression speed
-	  is quite fast too.
+	  kernel size is about 10% bigger than gzip. Pick ZSTD instead, or LZ4
+	  if speed is paramount.
 
 	  If you choose this, keep in mind that you may need to install the lzop
 	  tool to be able to compress the initram.
