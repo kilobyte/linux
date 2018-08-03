@@ -24,7 +24,6 @@ strip-flags   := $(addprefix --remove-section=,$(drop-sections))
 hostprogs-y := elf2ecoff
 
 suffix-y			:= bin
-suffix-$(CONFIG_KERNEL_BZIP2)	:= bz2
 suffix-$(CONFIG_KERNEL_GZIP)	:= gz
 suffix-$(CONFIG_KERNEL_LZMA)	:= lzma
 suffix-$(CONFIG_KERNEL_LZO)	:= lzo
@@ -54,13 +53,9 @@ UIMAGE_ENTRYADDR = $(VMLINUX_ENTRY_ADDRESS)
 # Compressed vmlinux images
 #
 
-extra-y += vmlinux.bin.bz2
 extra-y += vmlinux.bin.gz
 extra-y += vmlinux.bin.lzma
 extra-y += vmlinux.bin.lzo
-
-$(obj)/vmlinux.bin.bz2: $(obj)/vmlinux.bin FORCE
-	$(call if_changed,bzip2)
 
 $(obj)/vmlinux.bin.gz: $(obj)/vmlinux.bin FORCE
 	$(call if_changed,gzip)
@@ -77,16 +72,12 @@ $(obj)/vmlinux.bin.lzo: $(obj)/vmlinux.bin FORCE
 
 targets += uImage
 targets += uImage.bin
-targets += uImage.bz2
 targets += uImage.gz
 targets += uImage.lzma
 targets += uImage.lzo
 
 $(obj)/uImage.bin: $(obj)/vmlinux.bin FORCE
 	$(call if_changed,uimage,none)
-
-$(obj)/uImage.bz2: $(obj)/vmlinux.bin.bz2 FORCE
-	$(call if_changed,uimage,bzip2)
 
 $(obj)/uImage.gz: $(obj)/vmlinux.bin.gz FORCE
 	$(call if_changed,uimage,gzip)
@@ -122,7 +113,6 @@ $(obj)/vmlinux.its.S: $(addprefix $(srctree)/arch/mips/$(PLATFORM)/,$(ITS_INPUTS
 
 targets += vmlinux.its
 targets += vmlinux.gz.its
-targets += vmlinux.bz2.its
 targets += vmlinux.lzmo.its
 targets += vmlinux.lzo.its
 
@@ -142,9 +132,6 @@ $(obj)/vmlinux.its: $(obj)/vmlinux.its.S $(VMLINUX) FORCE
 $(obj)/vmlinux.gz.its: $(obj)/vmlinux.its.S $(VMLINUX) FORCE
 	$(call if_changed,cpp_its_S,gzip,vmlinux.bin.gz)
 
-$(obj)/vmlinux.bz2.its: $(obj)/vmlinux.its.S $(VMLINUX)  FORCE
-	$(call if_changed,cpp_its_S,bzip2,vmlinux.bin.bz2)
-
 $(obj)/vmlinux.lzma.its: $(obj)/vmlinux.its.S $(VMLINUX) FORCE
 	$(call if_changed,cpp_its_S,lzma,vmlinux.bin.lzma)
 
@@ -153,7 +140,6 @@ $(obj)/vmlinux.lzo.its: $(obj)/vmlinux.its.S $(VMLINUX) FORCE
 
 targets += vmlinux.itb
 targets += vmlinux.gz.itb
-targets += vmlinux.bz2.itb
 targets += vmlinux.lzma.itb
 targets += vmlinux.lzo.itb
 
