@@ -320,10 +320,10 @@ $(obj)/%.dt.yaml: $(src)/%.dts $(DTC) $(DT_TMP_SCHEMA) FORCE
 
 dtc-tmp = $(subst $(comma),_,$(dot-target).dts.tmp)
 
-# Bzip2
+# Lzma
 # ---------------------------------------------------------------------------
 
-# Bzip2 and LZMA do not include size in file... so we have to fake that;
+# LZMA does not include size in file... so we have to fake that;
 # append the size as a 32-bit littleendian number as gzip does.
 size_append = printf $(shell						\
 dec_size=0;								\
@@ -339,12 +339,6 @@ printf "%08x\n" $$dec_size |						\
 		done;							\
 	}								\
 )
-
-quiet_cmd_bzip2 = BZIP2   $@
-      cmd_bzip2 = { cat $(real-prereqs) | bzip2 -9 && $(size_append); } > $@
-
-# Lzma
-# ---------------------------------------------------------------------------
 
 quiet_cmd_lzma = LZMA    $@
       cmd_lzma = { cat $(real-prereqs) | lzma -9 && $(size_append); } > $@
