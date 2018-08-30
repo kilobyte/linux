@@ -41,10 +41,6 @@ extern int memcmp(const void *cs, const void *ct, size_t count);
 #include "../../../../lib/decompress_unlzo.c"
 #endif
 
-#ifdef CONFIG_KERNEL_LZMA
-#include "../../../../lib/decompress_unlzma.c"
-#endif
-
 #ifdef CONFIG_KERNEL_XZ
 #define memmove memmove
 #define memcpy memcpy
