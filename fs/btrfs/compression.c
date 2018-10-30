@@ -822,117 +822,21 @@ void __init btrfs_init_compress(void)
 
 		/*
 		 * Preallocate one workspace for each compression type so
-		 * we can guarantee forward progress in the worst case
+		 * we can guarantee forward progress in the worst case.
+		 * Provide the maximum compression level to guarantee large
+		 * enough workspace.
 		 */
-		workspace = btrfs_compress_op[i]->alloc_workspace();
+		workspace = btrfs_compress_op[i]->alloc_workspace(
+				btrfs_compress_op[i]->max_level);
 		if (IS_ERR(workspace)) {
-			pr_warn("BTRFS: cannot preallocate compression workspace, will try later\n");
+			pr_warn("BTRFS: cannot preallocate compression "
+				"workspace, will try later\n");
 		} else {
 			atomic_set(&btrfs_comp_ws[i].total_ws, 1);
 			btrfs_comp_ws[i].free_ws = 1;
 			list_add(workspace, &btrfs_comp_ws[i].idle_ws);
 		}
 	}
-}
-
-/*
- * This finds an available workspace or allocates a new one.
- * If it's not possible to allocate a new one, waits until there's one.
- * Preallocation makes a forward progress guarantees and we do not return
- * errors.
- */
-static struct list_head *__find_workspace(int type, bool heuristic)
-{
-	struct list_head *workspace;
-	int cpus = num_online_cpus();
-	int idx = type - 1;
-	unsigned nofs_flag;
-	struct list_head *idle_ws;
-	spinlock_t *ws_lock;
-	atomic_t *total_ws;
-	wait_queue_head_t *ws_wait;
-	int *free_ws;
-
-	if (heuristic) {
-		idle_ws	 = &btrfs_heuristic_ws.idle_ws;
-		ws_lock	 = &btrfs_heuristic_ws.ws_lock;
-		total_ws = &btrfs_heuristic_ws.total_ws;
-		ws_wait	 = &btrfs_heuristic_ws.ws_wait;
-		free_ws	 = &btrfs_heuristic_ws.free_ws;
-	} else {
-		idle_ws	 = &btrfs_comp_ws[idx].idle_ws;
-		ws_lock	 = &btrfs_comp_ws[idx].ws_lock;
-		total_ws = &btrfs_comp_ws[idx].total_ws;
-		ws_wait	 = &btrfs_comp_ws[idx].ws_wait;
-		free_ws	 = &btrfs_comp_ws[idx].free_ws;
-	}
-
-again:
-	spin_lock(ws_lock);
-	if (!list_empty(idle_ws)) {
-		workspace = idle_ws->next;
-		list_del(workspace);
-		(*free_ws)--;
-		spin_unlock(ws_lock);
-		return workspace;
-
-	}
-	if (atomic_read(total_ws) > cpus) {
-		DEFINE_WAIT(wait);
-
-		spin_unlock(ws_lock);
-		prepare_to_wait(ws_wait, &wait, TASK_UNINTERRUPTIBLE);
-		if (atomic_read(total_ws) > cpus && !*free_ws)
-			schedule();
-		finish_wait(ws_wait, &wait);
-		goto again;
-	}
-	atomic_inc(total_ws);
-	spin_unlock(ws_lock);
-
-	/*
-	 * Allocation helpers call vmalloc that can't use GFP_NOFS, so we have
-	 * to turn it off here because we might get called from the restricted
-	 * context of btrfs_compress_bio/btrfs_compress_pages
-	 */
-	nofs_flag = memalloc_nofs_save();
-	if (heuristic)
-		workspace = alloc_heuristic_ws();
-	else
-		workspace = btrfs_compress_op[idx]->alloc_workspace();
-	memalloc_nofs_restore(nofs_flag);
-
-	if (IS_ERR(workspace)) {
-		atomic_dec(total_ws);
-		wake_up(ws_wait);
-
-		/*
-		 * Do not return the error but go back to waiting. There's a
-		 * workspace preallocated for each type and the compression
-		 * time is bounded so we get to a workspace eventually. This
-		 * makes our caller's life easier.
-		 *
-		 * To prevent silent and low-probability deadlocks (when the
-		 * initial preallocation fails), check if there are any
-		 * workspaces at all.
-		 */
-		if (atomic_read(total_ws) == 0) {
-			static DEFINE_RATELIMIT_STATE(_rs,
-					/* once per minute */ 60 * HZ,
-					/* no burst */ 1);
-
-			if (__ratelimit(&_rs)) {
-				pr_warn("BTRFS: no compression workspaces, low memory, retrying\n");
-			}
-		}
-		goto again;
-	}
-	return workspace;
-}
-
-static struct list_head *find_workspace(int type)
-{
-	return __find_workspace(type, false);
 }
 
 /*
@@ -984,6 +888,133 @@ wake:
 static void free_workspace(int type, struct list_head *ws)
 {
 	return __free_workspace(type, ws, false);
+}
+
+/*
+ * This finds an available workspace or allocates a new one.
+ * If it's not possible to allocate a new one, waits until there's one.
+ * Preallocation makes a forward progress guarantees and we do not return
+ * errors.
+ */
+static struct list_head *__find_workspace(unsigned int type_level,
+					  bool heuristic)
+{
+	struct list_head *workspace;
+	int cpus = num_online_cpus();
+	int type = type_level & 0xF;
+	int idx = type - 1;
+	unsigned int level = (type_level & 0xF0) >> 4;
+	unsigned int nofs_flag;
+	struct list_head *idle_ws;
+	spinlock_t *ws_lock;
+	atomic_t *total_ws;
+	wait_queue_head_t *ws_wait;
+	int *free_ws;
+	int ret;
+
+	if (heuristic) {
+		idle_ws	 = &btrfs_heuristic_ws.idle_ws;
+		ws_lock	 = &btrfs_heuristic_ws.ws_lock;
+		total_ws = &btrfs_heuristic_ws.total_ws;
+		ws_wait	 = &btrfs_heuristic_ws.ws_wait;
+		free_ws	 = &btrfs_heuristic_ws.free_ws;
+	} else {
+		idle_ws	 = &btrfs_comp_ws[idx].idle_ws;
+		ws_lock	 = &btrfs_comp_ws[idx].ws_lock;
+		total_ws = &btrfs_comp_ws[idx].total_ws;
+		ws_wait	 = &btrfs_comp_ws[idx].ws_wait;
+		free_ws	 = &btrfs_comp_ws[idx].free_ws;
+	}
+
+again:
+	spin_lock(ws_lock);
+	if (!list_empty(idle_ws)) {
+		workspace = idle_ws->next;
+		list_del(workspace);
+		(*free_ws)--;
+		spin_unlock(ws_lock);
+		if (!heuristic) {
+			nofs_flag = memalloc_nofs_save();
+			ret = btrfs_compress_op[idx]->set_level(workspace,
+								level);
+			memalloc_nofs_restore(nofs_flag);
+			if (!ret) {
+				free_workspace(type, workspace);
+				goto again;
+			}
+		}
+		return workspace;
+	}
+	if (atomic_read(total_ws) > cpus) {
+		DEFINE_WAIT(wait);
+
+		spin_unlock(ws_lock);
+		prepare_to_wait(ws_wait, &wait, TASK_UNINTERRUPTIBLE);
+		if (atomic_read(total_ws) > cpus && !*free_ws)
+			schedule();
+		finish_wait(ws_wait, &wait);
+		goto again;
+	}
+	atomic_inc(total_ws);
+	spin_unlock(ws_lock);
+
+	/*
+	 * Allocation helpers call vmalloc that can't use GFP_NOFS, so we have
+	 * to turn it off here because we might get called from the restricted
+	 * context of btrfs_compress_bio/btrfs_compress_pages
+	 */
+	nofs_flag = memalloc_nofs_save();
+	if (heuristic)
+		workspace = alloc_heuristic_ws();
+	else
+		workspace = btrfs_compress_op[idx]->alloc_workspace(level);
+
+	memalloc_nofs_restore(nofs_flag);
+
+	if (IS_ERR(workspace)) {
+		atomic_dec(total_ws);
+		wake_up(ws_wait);
+
+		/*
+		 * Do not return the error but go back to waiting. There's a
+		 * workspace preallocated for each type and the compression
+		 * time is bounded so we get to a workspace eventually. This
+		 * makes our caller's life easier.
+		 *
+		 * To prevent silent and low-probability deadlocks (when the
+		 * initial preallocation fails), check if there are any
+		 * workspaces at all.
+		 */
+		if (atomic_read(total_ws) == 0) {
+			static DEFINE_RATELIMIT_STATE(_rs,
+					/* once per minute */ 60 * HZ,
+					/* no burst */ 1);
+
+			if (__ratelimit(&_rs)) {
+				pr_warn("BTRFS: no compression workspaces, low memory, retrying\n");
+			}
+		}
+		goto again;
+	}
+	return workspace;
+}
+
+static struct list_head *find_workspace(unsigned int type_level)
+{
+	return __find_workspace(type_level, false);
+}
+
+static struct list_head *find_decompression_workspace(unsigned int type)
+{
+	/*
+	 * Use the lowest level for decompression, since we don't need to
+	 * compress. This can help us save memory when using levels lower than
+	 * the default level.
+	 */
+	const unsigned int level = 1;
+	const unsigned int type_level = (level << 4) | (type & 0xF);
+
+	return find_workspace(type_level);
 }
 
 /*
@@ -1044,9 +1075,7 @@ int btrfs_compress_pages(unsigned int type_level, struct address_space *mapping,
 	int ret;
 	int type = type_level & 0xF;
 
-	workspace = find_workspace(type);
-
-	btrfs_compress_op[type - 1]->set_level(workspace, type_level);
+	workspace = find_workspace(type_level);
 	ret = btrfs_compress_op[type-1]->compress_pages(workspace, mapping,
 						      start, pages,
 						      out_pages,
@@ -1075,7 +1104,7 @@ static int btrfs_decompress_bio(struct compressed_bio *cb)
 	int ret;
 	int type = cb->compress_type;
 
-	workspace = find_workspace(type);
+	workspace = find_decompression_workspace(type);
 	ret = btrfs_compress_op[type - 1]->decompress_bio(workspace, cb);
 	free_workspace(type, workspace);
 
@@ -1093,7 +1122,7 @@ int btrfs_decompress(int type, unsigned char *data_in, struct page *dest_page,
 	struct list_head *workspace;
 	int ret;
 
-	workspace = find_workspace(type);
+	workspace = find_decompression_workspace(type);
 
 	ret = btrfs_compress_op[type-1]->decompress(workspace, data_in,
 						  dest_page, start_byte,
@@ -1591,12 +1620,23 @@ out:
 
 unsigned int btrfs_compress_str2level(const char *str)
 {
-	if (strncmp(str, "zlib", 4) != 0)
+	int ret;
+	int type;
+	unsigned int level;
+
+	if (strncmp(str, "zlib", 4) == 0)
+		type = BTRFS_COMPRESS_ZLIB;
+	else if (strncmp(str, "zstd", 4) == 0)
+		type = BTRFS_COMPRESS_ZSTD;
+	else
 		return 0;
 
-	/* Accepted form: zlib:1 up to zlib:9 and nothing left after the number */
-	if (str[4] == ':' && '1' <= str[5] && str[5] <= '9' && str[6] == 0)
-		return str[5] - '0';
+	if (str[4] == ':') {
+		ret = kstrtouint(str + 5, 10, &level);
+		if (ret == 0 && 0 < level &&
+		    level <= btrfs_compress_op[type-1]->max_level)
+			return level;
+	}
 
-	return BTRFS_ZLIB_DEFAULT_LEVEL;
+	return btrfs_compress_op[type-1]->default_level;
 }

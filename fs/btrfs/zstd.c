@@ -19,12 +19,13 @@
 
 #define ZSTD_BTRFS_MAX_WINDOWLOG 17
 #define ZSTD_BTRFS_MAX_INPUT (1 << ZSTD_BTRFS_MAX_WINDOWLOG)
-#define ZSTD_BTRFS_DEFAULT_LEVEL 3
+#define BTRFS_ZSTD_DEFAULT_LEVEL 3
+#define BTRFS_ZSTD_MAX_LEVEL 15
 
-static ZSTD_parameters zstd_get_btrfs_parameters(size_t src_len)
+static ZSTD_parameters zstd_get_btrfs_parameters(size_t src_len,
+						 unsigned int level)
 {
-	ZSTD_parameters params = ZSTD_getParams(ZSTD_BTRFS_DEFAULT_LEVEL,
-						src_len, 0);
+	ZSTD_parameters params = ZSTD_getParams(level, src_len, 0);
 
 	if (params.cParams.windowLog > ZSTD_BTRFS_MAX_WINDOWLOG)
 		params.cParams.windowLog = ZSTD_BTRFS_MAX_WINDOWLOG;
@@ -37,9 +38,24 @@ struct workspace {
 	size_t size;
 	char *buf;
 	struct list_head list;
+	unsigned int level;
 	ZSTD_inBuffer in_buf;
 	ZSTD_outBuffer out_buf;
 };
+
+static bool zstd_reallocate_mem(struct workspace *workspace, int size)
+{
+	void *new_mem;
+
+	new_mem = kvmalloc(size, GFP_KERNEL);
+	if (new_mem) {
+		kvfree(workspace->mem);
+		workspace->mem = new_mem;
+		workspace->size = size;
+		return true;
+	}
+	return false;
+}
 
 static void zstd_free_workspace(struct list_head *ws)
 {
@@ -50,10 +66,34 @@ static void zstd_free_workspace(struct list_head *ws)
 	kfree(workspace);
 }
 
-static struct list_head *zstd_alloc_workspace(void)
+static bool zstd_set_level(struct list_head *ws, unsigned int level)
+{
+	struct workspace *workspace = list_entry(ws, struct workspace, list);
+	ZSTD_parameters params;
+	int size;
+
+	if (level > BTRFS_ZSTD_MAX_LEVEL)
+		level = BTRFS_ZSTD_MAX_LEVEL;
+
+	if (level == 0)
+		level = BTRFS_ZSTD_DEFAULT_LEVEL;
+
+	params = ZSTD_getParams(level, ZSTD_BTRFS_MAX_INPUT, 0);
+	size = max_t(size_t,
+			ZSTD_CStreamWorkspaceBound(params.cParams),
+			ZSTD_DStreamWorkspaceBound(ZSTD_BTRFS_MAX_INPUT));
+	if (size > workspace->size) {
+		if (!zstd_reallocate_mem(workspace, size))
+			return false;
+	}
+	workspace->level = level;
+	return true;
+}
+
+static struct list_head *zstd_alloc_workspace(unsigned int level)
 {
 	ZSTD_parameters params =
-			zstd_get_btrfs_parameters(ZSTD_BTRFS_MAX_INPUT);
+			zstd_get_btrfs_parameters(ZSTD_BTRFS_MAX_INPUT, level);
 	struct workspace *workspace;
 
 	workspace = kzalloc(sizeof(*workspace), GFP_KERNEL);
@@ -69,6 +109,7 @@ static struct list_head *zstd_alloc_workspace(void)
 		goto fail;
 
 	INIT_LIST_HEAD(&workspace->list);
+	zstd_set_level(&workspace->list, level);
 
 	return &workspace->list;
 fail:
@@ -95,7 +136,8 @@ static int zstd_compress_pages(struct list_head *ws,
 	unsigned long len = *total_out;
 	const unsigned long nr_dest_pages = *out_pages;
 	unsigned long max_out = nr_dest_pages * PAGE_SIZE;
-	ZSTD_parameters params = zstd_get_btrfs_parameters(len);
+	ZSTD_parameters params = zstd_get_btrfs_parameters(len,
+							   workspace->level);
 
 	*out_pages = 0;
 	*total_out = 0;
@@ -419,15 +461,13 @@ finish:
 	return ret;
 }
 
-static void zstd_set_level(struct list_head *ws, unsigned int type)
-{
-}
-
 const struct btrfs_compress_op btrfs_zstd_compress = {
-	.alloc_workspace = zstd_alloc_workspace,
-	.free_workspace = zstd_free_workspace,
-	.compress_pages = zstd_compress_pages,
-	.decompress_bio = zstd_decompress_bio,
-	.decompress = zstd_decompress,
-	.set_level = zstd_set_level,
+	.alloc_workspace	= zstd_alloc_workspace,
+	.free_workspace		= zstd_free_workspace,
+	.compress_pages		= zstd_compress_pages,
+	.decompress_bio		= zstd_decompress_bio,
+	.decompress		= zstd_decompress,
+	.set_level		= zstd_set_level,
+	.max_level		= BTRFS_ZSTD_MAX_LEVEL,
+	.default_level		= BTRFS_ZSTD_DEFAULT_LEVEL,
 };

@@ -20,6 +20,9 @@
 #include <linux/refcount.h>
 #include "compression.h"
 
+#define BTRFS_ZLIB_DEFAULT_LEVEL 3
+#define BTRFS_ZLIB_MAX_LEVEL 9
+
 struct workspace {
 	z_stream strm;
 	char *buf;
@@ -36,7 +39,19 @@ static void zlib_free_workspace(struct list_head *ws)
 	kfree(workspace);
 }
 
-static struct list_head *zlib_alloc_workspace(void)
+static bool zlib_set_level(struct list_head *ws, unsigned int level)
+{
+	struct workspace *workspace = list_entry(ws, struct workspace, list);
+
+	if (level > BTRFS_ZLIB_MAX_LEVEL)
+		level = BTRFS_ZLIB_MAX_LEVEL;
+
+	workspace->level = level > 0 ? level : BTRFS_ZLIB_DEFAULT_LEVEL;
+
+	return true;
+}
+
+static struct list_head *zlib_alloc_workspace(unsigned int level)
 {
 	struct workspace *workspace;
 	int workspacesize;
@@ -53,6 +68,7 @@ static struct list_head *zlib_alloc_workspace(void)
 		goto fail;
 
 	INIT_LIST_HEAD(&workspace->list);
+	zlib_set_level(&workspace->list, level);
 
 	return &workspace->list;
 fail:
@@ -390,22 +406,13 @@ next:
 	return ret;
 }
 
-static void zlib_set_level(struct list_head *ws, unsigned int type)
-{
-	struct workspace *workspace = list_entry(ws, struct workspace, list);
-	unsigned level = (type & 0xF0) >> 4;
-
-	if (level > 9)
-		level = 9;
-
-	workspace->level = level > 0 ? level : 3;
-}
-
 const struct btrfs_compress_op btrfs_zlib_compress = {
 	.alloc_workspace	= zlib_alloc_workspace,
 	.free_workspace		= zlib_free_workspace,
 	.compress_pages		= zlib_compress_pages,
 	.decompress_bio		= zlib_decompress_bio,
 	.decompress		= zlib_decompress,
-	.set_level              = zlib_set_level,
+	.set_level		= zlib_set_level,
+	.max_level		= BTRFS_ZLIB_MAX_LEVEL,
+	.default_level		= BTRFS_ZLIB_DEFAULT_LEVEL,
 };
