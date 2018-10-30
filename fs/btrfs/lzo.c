@@ -71,7 +71,7 @@ static void lzo_free_workspace(struct list_head *ws)
 	kfree(workspace);
 }
 
-static struct list_head *lzo_alloc_workspace(void)
+static struct list_head *lzo_alloc_workspace(unsigned int level)
 {
 	struct workspace *workspace;
 
@@ -485,8 +485,9 @@ out:
 	return ret;
 }
 
-static void lzo_set_level(struct list_head *ws, unsigned int type)
+static bool lzo_set_level(struct list_head *ws, unsigned int level)
 {
+	return true;
 }
 
 const struct btrfs_compress_op btrfs_lzo_compress = {

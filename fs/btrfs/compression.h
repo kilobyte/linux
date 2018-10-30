@@ -23,8 +23,6 @@
 /* Maximum size of data before compression */
 #define BTRFS_MAX_UNCOMPRESSED		(SZ_128K)
 
-#define	BTRFS_ZLIB_DEFAULT_LEVEL		3
-
 struct compressed_bio {
 	/* number of bios pending for this compressed extent */
 	refcount_t pending_bios;
@@ -87,7 +85,7 @@ blk_status_t btrfs_submit_compressed_write(struct inode *inode, u64 start,
 blk_status_t btrfs_submit_compressed_read(struct inode *inode, struct bio *bio,
 				 int mirror_num, unsigned long bio_flags);
 
-unsigned btrfs_compress_str2level(const char *str);
+unsigned int btrfs_compress_str2level(const char *str);
 
 enum btrfs_compression_type {
 	BTRFS_COMPRESS_NONE  = 0,
@@ -98,7 +96,7 @@ enum btrfs_compression_type {
 };
 
 struct btrfs_compress_op {
-	struct list_head *(*alloc_workspace)(void);
+	struct list_head *(*alloc_workspace)(unsigned int level);
 
 	void (*free_workspace)(struct list_head *workspace);
 
@@ -119,7 +117,17 @@ struct btrfs_compress_op {
 			  unsigned long start_byte,
 			  size_t srclen, size_t destlen);
 
-	void (*set_level)(struct list_head *ws, unsigned int type);
+	/*
+	 * Check if memory allocated in workspace is greater than
+	 * or equal to memory needed to compress with given level.
+	 * If not, try to reallocate memory for the compression level.
+	 * Returns true on success.
+	 */
+	bool (*set_level)(struct list_head *ws, unsigned int level);
+
+	unsigned int max_level;
+
+	unsigned int default_level;
 };
 
 extern const struct btrfs_compress_op btrfs_zlib_compress;
