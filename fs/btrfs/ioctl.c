@@ -2990,6 +2990,12 @@ static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
 			goto out;
 		}
 
+		if (IS_DAX(inode)) {
+			btrfs_warn(root->fs_info, "File defrag is not supported with DAX");
+			ret = -EOPNOTSUPP;
+			goto out;
+		}
+
 		if (argp) {
 			if (copy_from_user(range, argp,
 					   sizeof(*range))) {
@@ -4653,6 +4659,10 @@ static long btrfs_ioctl_balance(struct file *file, void __user *arg)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
+	/* send can be on a directory, so check super block instead */
+	if (btrfs_test_opt(fs_info, DAX))
+		return -EOPNOTSUPP;
+
 	ret = mnt_want_write_file(file);
 	if (ret)
 		return ret;
@@ -5504,6 +5514,9 @@ static int _btrfs_ioctl_send(struct file *file, void __user *argp, bool compat)
 {
 	struct btrfs_ioctl_send_args *arg;
 	int ret;
+
+	if (IS_DAX(file_inode(file)))
+		return -EOPNOTSUPP;
 
 	if (compat) {
 #if defined(CONFIG_64BIT) && defined(CONFIG_COMPAT)
