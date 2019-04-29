@@ -28,6 +28,7 @@
 #include <linux/magic.h>
 #include <linux/iversion.h>
 #include <linux/swap.h>
+#include <linux/dax.h>
 #include <asm/unaligned.h>
 #include "ctree.h"
 #include "disk-io.h"
@@ -65,6 +66,7 @@ static const struct inode_operations btrfs_dir_ro_inode_operations;
 static const struct inode_operations btrfs_special_inode_operations;
 static const struct inode_operations btrfs_file_inode_operations;
 static const struct address_space_operations btrfs_aops;
+static const struct address_space_operations btrfs_dax_aops;
 static const struct file_operations btrfs_dir_file_operations;
 static const struct extent_io_ops btrfs_extent_io_ops;
 
@@ -3757,7 +3759,10 @@ cache_acl:
 
 	switch (inode->i_mode & S_IFMT) {
 	case S_IFREG:
-		inode->i_mapping->a_ops = &btrfs_aops;
+		if (btrfs_test_opt(fs_info, DAX))
+			inode->i_mapping->a_ops = &btrfs_dax_aops;
+		else
+			inode->i_mapping->a_ops = &btrfs_aops;
 		BTRFS_I(inode)->io_tree.ops = &btrfs_extent_io_ops;
 		inode->i_fop = &btrfs_file_operations;
 		inode->i_op = &btrfs_file_inode_operations;
@@ -3778,6 +3783,7 @@ cache_acl:
 	}
 
 	btrfs_sync_inode_flags_to_i_flags(inode);
+
 	return 0;
 }
 
@@ -6538,7 +6544,10 @@ static int btrfs_create(struct inode *dir, struct dentry *dentry,
 	*/
 	inode->i_fop = &btrfs_file_operations;
 	inode->i_op = &btrfs_file_inode_operations;
-	inode->i_mapping->a_ops = &btrfs_aops;
+	if (IS_DAX(inode) && S_ISREG(mode))
+		inode->i_mapping->a_ops = &btrfs_dax_aops;
+	else
+		inode->i_mapping->a_ops = &btrfs_aops;
 
 	err = btrfs_init_inode_security(trans, inode, dir, &dentry->d_name);
 	if (err)
@@ -8665,6 +8674,15 @@ static int btrfs_writepages(struct address_space *mapping,
 	return extent_writepages(mapping, wbc);
 }
 
+static int btrfs_dax_writepages(struct address_space *mapping,
+			    struct writeback_control *wbc)
+{
+	struct inode *inode = mapping->host;
+	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
+	return dax_writeback_mapping_range(mapping, fs_info->fs_devices->latest_bdev,
+			wbc);
+}
+
 static int
 btrfs_readpages(struct file *file, struct address_space *mapping,
 		struct list_head *pages, unsigned nr_pages)
@@ -10436,7 +10454,10 @@ static int btrfs_tmpfile(struct inode *dir, struct dentry *dentry, umode_t mode)
 	inode->i_fop = &btrfs_file_operations;
 	inode->i_op = &btrfs_file_inode_operations;
 
-	inode->i_mapping->a_ops = &btrfs_aops;
+	if (IS_DAX(inode))
+		inode->i_mapping->a_ops = &btrfs_dax_aops;
+	else
+		inode->i_mapping->a_ops = &btrfs_aops;
 	BTRFS_I(inode)->io_tree.ops = &btrfs_extent_io_ops;
 
 	ret = btrfs_init_inode_security(trans, inode, dir, NULL);
@@ -10890,6 +10911,13 @@ static const struct address_space_operations btrfs_aops = {
 	.error_remove_page = generic_error_remove_page,
 	.swap_activate	= btrfs_swap_activate,
 	.swap_deactivate = btrfs_swap_deactivate,
+};
+
+static const struct address_space_operations btrfs_dax_aops = {
+	.writepages             = btrfs_dax_writepages,
+	.direct_IO              = noop_direct_IO,
+	.set_page_dirty         = noop_set_page_dirty,
+	.invalidatepage         = noop_invalidatepage,
 };
 
 static const struct inode_operations btrfs_file_inode_operations = {
