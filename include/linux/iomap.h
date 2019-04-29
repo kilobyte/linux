@@ -7,6 +7,7 @@
 #include <linux/mm.h>
 #include <linux/types.h>
 #include <linux/mm_types.h>
+#include <linux/blkdev.h>
 
 struct address_space;
 struct fiemap_extent_info;
@@ -118,6 +119,11 @@ static inline struct iomap_page *to_iomap_page(struct page *page)
 	if (page_has_private(page))
 		return (struct iomap_page *)page_private(page);
 	return NULL;
+}
+
+static inline sector_t iomap_sector(struct iomap *iomap, loff_t pos)
+{
+	return (iomap->addr + pos - iomap->offset) >> SECTOR_SHIFT;
 }
 
 ssize_t iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *from,
