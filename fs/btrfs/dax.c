@@ -104,6 +104,8 @@ static int btrfs_iomap_begin(struct inode *inode, loff_t pos,
 	u64 srcblk = 0;
 	loff_t diff;
 
+	trace_btrfs_iomap_begin(inode, pos, length, flags);
+
 	em = btrfs_get_extent(BTRFS_I(inode), NULL, 0, pos, length, 0);
 
 	iomap->type = IOMAP_MAPPED;
@@ -164,6 +166,7 @@ static int btrfs_iomap_end(struct inode *inode, loff_t pos,
 {
 	struct btrfs_iomap *bi = iomap->private;
 	u64 wend;
+	trace_btrfs_iomap_end(inode, pos, length, written, flags);
 
 	if (!bi)
 		return 0;
