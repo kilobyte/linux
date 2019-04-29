@@ -16,6 +16,7 @@
 #include <linux/uuid.h>
 #include <linux/semaphore.h>
 #include <linux/error-injection.h>
+#include <linux/dax.h>
 #include <linux/crc32c.h>
 #include <linux/sched/mm.h>
 #include <asm/unaligned.h>
@@ -2805,6 +2806,8 @@ int open_ctree(struct super_block *sb,
 		goto fail_alloc;
 	}
 
+	fs_info->dax_dev = fs_dax_get_by_bdev(fs_devices->latest_bdev);
+
 	/*
 	 * We want to check superblock checksum, the type is stored inside.
 	 * Pass the whole disk block of size BTRFS_SUPER_INFO_SIZE (4k).
@@ -4043,6 +4046,7 @@ void close_ctree(struct btrfs_fs_info *fs_info)
 #endif
 
 	btrfs_close_devices(fs_info->fs_devices);
+	fs_put_dax(fs_info->dax_dev);
 	btrfs_mapping_tree_free(&fs_info->mapping_tree);
 
 	percpu_counter_destroy(&fs_info->dirty_metadata_bytes);

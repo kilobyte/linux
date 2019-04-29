@@ -326,6 +326,7 @@ enum {
 	Opt_treelog, Opt_notreelog,
 	Opt_usebackuproot,
 	Opt_user_subvol_rm_allowed,
+	Opt_dax,
 
 	/* Deprecated options */
 	Opt_alloc_start,
@@ -393,6 +394,7 @@ static const match_table_t tokens = {
 	{Opt_notreelog, "notreelog"},
 	{Opt_usebackuproot, "usebackuproot"},
 	{Opt_user_subvol_rm_allowed, "user_subvol_rm_allowed"},
+	{Opt_dax, "dax"},
 
 	/* Deprecated options */
 	{Opt_alloc_start, "alloc_start=%s"},
@@ -745,6 +747,32 @@ int btrfs_parse_options(struct btrfs_fs_info *info, char *options,
 		case Opt_user_subvol_rm_allowed:
 			btrfs_set_opt(info->mount_opt, USER_SUBVOL_RM_ALLOWED);
 			break;
+		case Opt_dax:
+#ifdef CONFIG_FS_DAX
+			if (btrfs_super_num_devices(info->super_copy) > 1) {
+				btrfs_info(info,
+					   "dax not supported for multi-device btrfs partition\n");
+				ret = -EOPNOTSUPP;
+				goto out;
+			}
+			btrfs_set_opt(info->mount_opt, DAX);
+			btrfs_warn(info, "DAX enabled. Warning: EXPERIMENTAL, use at your own risk\n");
+			btrfs_set_and_info(info, NODATASUM,
+					   "auto-setting nodatasum (dax)");
+			btrfs_clear_opt(info->mount_opt, SPACE_CACHE);
+			btrfs_set_and_info(info, FREE_SPACE_TREE,
+					"auto-setting free space tree (dax)");
+			if (btrfs_test_opt(info, COMPRESS)) {
+				btrfs_info(info, "disabling compress (dax)");
+				btrfs_clear_opt(info->mount_opt, COMPRESS);
+			}
+			break;
+#else
+			btrfs_err(info,
+				  "DAX option not supported\n");
+			ret = -EINVAL;
+			goto out;
+#endif
 		case Opt_enospc_debug:
 			btrfs_set_opt(info->mount_opt, ENOSPC_DEBUG);
 			break;
@@ -1335,6 +1363,8 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 		seq_puts(seq, ",clear_cache");
 	if (btrfs_test_opt(info, USER_SUBVOL_RM_ALLOWED))
 		seq_puts(seq, ",user_subvol_rm_allowed");
+	if (btrfs_test_opt(info, DAX))
+		seq_puts(seq, ",dax");
 	if (btrfs_test_opt(info, ENOSPC_DEBUG))
 		seq_puts(seq, ",enospc_debug");
 	if (btrfs_test_opt(info, AUTO_DEFRAG))

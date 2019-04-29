@@ -1067,6 +1067,7 @@ struct btrfs_fs_info {
 	u32 metadata_ratio;
 
 	void *bdev_holder;
+	struct dax_device *dax_dev;
 
 	/* private scrub information */
 	struct mutex scrub_lock;
@@ -1442,6 +1443,7 @@ static inline u32 BTRFS_MAX_XATTR_SIZE(const struct btrfs_fs_info *info)
 #define BTRFS_MOUNT_FREE_SPACE_TREE	(1 << 26)
 #define BTRFS_MOUNT_NOLOGREPLAY		(1 << 27)
 #define BTRFS_MOUNT_REF_VERIFY		(1 << 28)
+#define BTRFS_MOUNT_DAX			(1 << 29)
 
 #define BTRFS_DEFAULT_COMMIT_INTERVAL	(30)
 #define BTRFS_DEFAULT_MAX_INLINE	(2048)
