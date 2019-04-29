@@ -227,4 +227,12 @@ vm_fault_t btrfs_dax_fault(struct vm_fault *vmf)
 
 	return ret;
 }
+
+int btrfs_dax_file_range_compare(struct inode *src, loff_t srcoff,
+		struct inode *dest, loff_t destoff, loff_t len,
+		bool *is_same)
+{
+	return dax_file_range_compare(src, srcoff, dest, destoff, len,
+				      is_same, &btrfs_iomap_ops);
+}
 #endif /* CONFIG_FS_DAX */
