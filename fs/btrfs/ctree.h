@@ -3795,6 +3795,11 @@ int btrfs_reada_wait(void *handle);
 void btrfs_reada_detach(void *handle);
 int btree_readahead_hook(struct extent_buffer *eb, int err);
 
+#ifdef CONFIG_FS_DAX
+/* dax.c */
+ssize_t btrfs_file_dax_read(struct kiocb *iocb, struct iov_iter *to);
+#endif /* CONFIG_FS_DAX */
+
 static inline int is_fstree(u64 rootid)
 {
 	if (rootid == BTRFS_FS_TREE_OBJECTID ||
