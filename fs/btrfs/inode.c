@@ -1713,7 +1713,7 @@ void btrfs_merge_delalloc_extent(struct inode *inode, struct extent_state *new,
 	spin_unlock(&BTRFS_I(inode)->lock);
 }
 
-static void btrfs_add_delalloc_inodes(struct btrfs_root *root,
+void btrfs_add_delalloc_inodes(struct btrfs_root *root,
 				      struct inode *inode)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
@@ -5358,11 +5358,16 @@ void btrfs_evict_inode(struct inode *inode)
 {
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
 	struct btrfs_trans_handle *trans;
+	struct btrfs_inode *binode = BTRFS_I(inode);
 	struct btrfs_root *root = BTRFS_I(inode)->root;
 	struct btrfs_block_rsv *rsv;
 	int ret;
 
 	trace_btrfs_inode_evict(inode);
+
+	if (IS_DAX(inode)
+	    && test_bit(BTRFS_INODE_IN_DELALLOC_LIST, &binode->runtime_flags))
+		btrfs_del_delalloc_inode(root, binode);
 
 	if (!root) {
 		clear_inode(inode);
@@ -8683,6 +8688,10 @@ static int btrfs_dax_writepages(struct address_space *mapping,
 {
 	struct inode *inode = mapping->host;
 	struct btrfs_fs_info *fs_info = btrfs_sb(inode->i_sb);
+	struct btrfs_inode *binode = BTRFS_I(inode);
+	if ((wbc->sync_mode == WB_SYNC_ALL) &&
+	    test_bit(BTRFS_INODE_IN_DELALLOC_LIST, &binode->runtime_flags))
+		btrfs_del_delalloc_inode(binode->root, binode);
 	return dax_writeback_mapping_range(mapping, fs_info->fs_devices->latest_bdev,
 			wbc);
 }
@@ -9981,6 +9990,8 @@ static void btrfs_run_delalloc_work(struct btrfs_work *work)
 	delalloc_work = container_of(work, struct btrfs_delalloc_work,
 				     work);
 	inode = delalloc_work->inode;
+	if (IS_DAX(inode))
+		filemap_fdatawrite(inode->i_mapping);
 	filemap_flush(inode->i_mapping);
 	if (test_bit(BTRFS_INODE_HAS_ASYNC_EXTENT,
 				&BTRFS_I(inode)->runtime_flags))

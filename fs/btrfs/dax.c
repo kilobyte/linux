@@ -222,9 +222,16 @@ vm_fault_t btrfs_dax_fault(struct vm_fault *vmf)
 {
 	vm_fault_t ret;
 	pfn_t pfn;
+	struct inode *inode = file_inode(vmf->vma->vm_file);
+	struct btrfs_inode *binode = BTRFS_I(inode);
 	ret = dax_iomap_fault(vmf, PE_SIZE_PTE, &pfn, NULL, &btrfs_iomap_ops);
 	if (ret & VM_FAULT_NEEDDSYNC)
 		ret = dax_finish_sync_fault(vmf, PE_SIZE_PTE, pfn);
+
+	/* Insert into delalloc so we get writeback calls on snapshots */
+	if (vmf->flags & FAULT_FLAG_WRITE &&
+			!test_bit(BTRFS_INODE_IN_DELALLOC_LIST, &binode->runtime_flags))
+		btrfs_add_delalloc_inodes(binode->root, inode);
 
 	return ret;
 }
