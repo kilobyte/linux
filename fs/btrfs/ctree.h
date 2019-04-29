@@ -3801,6 +3801,12 @@ int btree_readahead_hook(struct extent_buffer *eb, int err);
 #ifdef CONFIG_FS_DAX
 /* dax.c */
 ssize_t btrfs_file_dax_read(struct kiocb *iocb, struct iov_iter *to);
+ssize_t btrfs_file_dax_write(struct kiocb *iocb, struct iov_iter *from);
+#else
+static inline ssize_t btrfs_file_dax_write(struct kiocb *iocb, struct iov_iter *from)
+{
+	return 0;
+}
 #endif /* CONFIG_FS_DAX */
 
 static inline int is_fstree(u64 rootid)
