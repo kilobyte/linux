@@ -139,7 +139,7 @@ static int btrfs_iomap_begin(struct inode *inode, loff_t pos,
 
 	iomap->addr = em->block_start + diff;
 	/* Check if we really need to copy data from old extent */
-	if (bi && !bi->nocow && (offset || pos + length < bi->end)) {
+	if (bi && !bi->nocow && (offset || pos + length < bi->end || flags & IOMAP_FAULT)) {
 		iomap->type = IOMAP_DAX_COW;
 		if (srcblk) {
 			sector_t sector = (srcblk + (pos & PAGE_MASK) -
@@ -214,6 +214,17 @@ ssize_t btrfs_file_dax_write(struct kiocb *iocb, struct iov_iter *iter)
 			i_size_write(inode, pos);
 		iocb->ki_pos = pos;
 	}
+	return ret;
+}
+
+vm_fault_t btrfs_dax_fault(struct vm_fault *vmf)
+{
+	vm_fault_t ret;
+	pfn_t pfn;
+	ret = dax_iomap_fault(vmf, PE_SIZE_PTE, &pfn, NULL, &btrfs_iomap_ops);
+	if (ret & VM_FAULT_NEEDDSYNC)
+		ret = dax_finish_sync_fault(vmf, PE_SIZE_PTE, pfn);
+
 	return ret;
 }
 #endif /* CONFIG_FS_DAX */

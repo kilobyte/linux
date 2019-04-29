@@ -2214,15 +2214,29 @@ static const struct vm_operations_struct btrfs_file_vm_ops = {
 	.page_mkwrite	= btrfs_page_mkwrite,
 };
 
+#ifdef CONFIG_FS_DAX
+static const struct vm_operations_struct btrfs_dax_vm_ops = {
+	.fault          = btrfs_dax_fault,
+	.page_mkwrite   = btrfs_dax_fault,
+	.pfn_mkwrite    = btrfs_dax_fault,
+};
+#else
+#define btrfs_dax_vm_ops btrfs_file_vm_ops
+#endif
+
 static int btrfs_file_mmap(struct file	*filp, struct vm_area_struct *vma)
 {
 	struct address_space *mapping = filp->f_mapping;
+	struct inode *inode = file_inode(filp);
 
-	if (!mapping->a_ops->readpage)
+	if (!IS_DAX(inode) && !mapping->a_ops->readpage)
 		return -ENOEXEC;
 
 	file_accessed(filp);
-	vma->vm_ops = &btrfs_file_vm_ops;
+	if (IS_DAX(inode))
+		vma->vm_ops = &btrfs_dax_vm_ops;
+	else
+		vma->vm_ops = &btrfs_file_vm_ops;
 
 	return 0;
 }
