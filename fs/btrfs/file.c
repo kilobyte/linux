@@ -2233,6 +2233,13 @@ static int btrfs_file_mmap(struct file	*filp, struct vm_area_struct *vma)
 	if (!IS_DAX(inode) && !mapping->a_ops->readpage)
 		return -ENOEXEC;
 
+	/*
+	 * Normal operation of btrfs is pretty much an antithesis of MAP_SYNC;
+	 * supporting it outside DAX is pointless.
+	 */
+	if (!IS_DAX(inode) && (vma->vm_flags & VM_SYNC))
+		return -EOPNOTSUPP;
+
 	file_accessed(filp);
 	if (IS_DAX(inode))
 		vma->vm_ops = &btrfs_dax_vm_ops;
