@@ -13,21 +13,20 @@
 
 DEFINE_STATIC_KEY_FALSE(kvm_arm_pmu_available);
 
-static int kvm_is_in_guest(void)
-{
-        return kvm_get_running_vcpu() != NULL;
-}
-
-static int kvm_is_user_mode(void)
+static unsigned int kvm_guest_state(void)
 {
 	struct kvm_vcpu *vcpu;
+	unsigned int state = 0;
+
+	if (kvm_get_running_vcpu())
+		state |= PERF_GUEST_ACTIVE;
 
 	vcpu = kvm_get_running_vcpu();
 
-	if (vcpu)
-		return !vcpu_mode_priv(vcpu);
+	if (vcpu && !vcpu_mode_priv(vcpu))
+		state |= PERF_GUEST_USER;
 
-	return 0;
+	return state;
 }
 
 static unsigned long kvm_get_guest_ip(void)
@@ -43,9 +42,8 @@ static unsigned long kvm_get_guest_ip(void)
 }
 
 static struct perf_guest_info_callbacks kvm_guest_cbs = {
-	.is_in_guest	= kvm_is_in_guest,
-	.is_user_mode	= kvm_is_user_mode,
-	.get_guest_ip	= kvm_get_guest_ip,
+	.state		= kvm_guest_state,
+	.get_ip		= kvm_get_guest_ip,
 };
 
 int kvm_perf_init(void)

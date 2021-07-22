@@ -6489,9 +6489,18 @@ static void perf_pending_event(struct irq_work *entry)
  */
 struct perf_guest_info_callbacks *perf_guest_cbs;
 
+/* explicitly use __weak to fix duplicate symbol error */
+void __weak arch_perf_update_guest_cbs(void)
+{
+}
+
 int perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 {
+	if (WARN_ON_ONCE(perf_guest_cbs))
+		return -EBUSY;
+
 	perf_guest_cbs = cbs;
+	arch_perf_update_guest_cbs();
 	return 0;
 }
 EXPORT_SYMBOL_GPL(perf_register_guest_info_callbacks);
