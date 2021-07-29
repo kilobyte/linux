@@ -729,8 +729,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
 
 		edx.split.num_counters_fixed = kvm_pmu_cap.num_counters_fixed;
 		edx.split.bit_width_fixed = kvm_pmu_cap.bit_width_fixed;
-		if (cap.version)
-			edx.split.anythread_deprecated = 1;
+		edx.split.anythread_deprecated = 1;
 		edx.split.reserved1 = 0;
 		edx.split.reserved2 = 0;
 
