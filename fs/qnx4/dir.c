@@ -44,20 +44,17 @@ static int qnx4_readdir(struct file *file, struct dir_context *ctx)
 				continue;
 			if (!(de->di_status & (QNX4_FILE_USED|QNX4_FILE_LINK)))
 				continue;
-			if (!(de->di_status & QNX4_FILE_LINK))
-				size = QNX4_SHORT_NAME_MAX;
-			else
-				size = QNX4_NAME_MAX;
-			size = strnlen(de->di_fname, size);
-			QNX4DEBUG((KERN_INFO "qnx4_readdir:%.*s\n", size, de->di_fname));
-			if (!(de->di_status & QNX4_FILE_LINK))
+			if (!(de->di_status & QNX4_FILE_LINK)) {
+				size = strnlen(de->di_fname, QNX4_SHORT_NAME_MAX);
 				ino = blknum * QNX4_INODES_PER_BLOCK + ix - 1;
-			else {
+			} else {
 				le  = (struct qnx4_link_info*)de;
+				size = strnlen(le->dl_fname, QNX4_NAME_MAX);
 				ino = ( le32_to_cpu(le->dl_inode_blk) - 1 ) *
 					QNX4_INODES_PER_BLOCK +
 					le->dl_inode_ndx;
 			}
+			QNX4DEBUG((KERN_INFO "qnx4_readdir:%.*s\n", size, de->di_fname));
 			if (!dir_emit(ctx, de->di_fname, size, ino, DT_UNKNOWN)) {
 				brelse(bh);
 				return 0;
