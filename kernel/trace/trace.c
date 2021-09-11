@@ -1695,6 +1695,7 @@ static const struct file_operations tracing_max_lat_fops;
 
 static struct workqueue_struct *fsnotify_wq;
 
+#if defined(CONFIG_TRACER_MAX_TRACE) || defined(CONFIG_HWLAT_TRACER)
 static void latency_fsnotify_workfn(struct work_struct *work)
 {
 	struct trace_array *tr = container_of(work, struct trace_array,
@@ -1718,6 +1719,7 @@ static void trace_create_maxlat_file(struct trace_array *tr,
 					      d_tracer, &tr->max_latency,
 					      &tracing_max_lat_fops);
 }
+#endif
 
 __init static int latency_fsnotify_init(void)
 {
