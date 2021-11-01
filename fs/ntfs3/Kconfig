@@ -26,6 +26,7 @@ config NTFS3_64BIT_CLUSTER
 config NTFS3_LZX_XPRESS
 	bool "activate support of external compressions lzx/xpress"
 	depends on NTFS3_FS
+	default y
 	help
 	  In Windows 10 one can use command "compact" to compress any files.
 	  4 possible variants of compression are: xpress4k, xpress8k, xpress16k and lzx.
