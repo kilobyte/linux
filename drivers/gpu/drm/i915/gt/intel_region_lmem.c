@@ -35,10 +35,16 @@ _resize_bar(struct drm_i915_private *i915, int resno, resource_size_t size)
 
 	_release_bars(pdev);
 
+retry:
 	ret = pci_resize_resource(pdev, resno, bar_size);
 	if (ret) {
 		drm_info(&i915->drm, "Failed to resize BAR%d to %dM (%pe)\n",
 			 resno, 1 << bar_size, ERR_PTR(ret));
+		if (ret == -ENOSPC && bar_size > 8) {
+			drm_info(&i915->drm, "Retrying with half (%d)", bar_size);
+			bar_size--;
+			goto retry;
+		}
 		return;
 	}
 
