@@ -2129,7 +2129,7 @@ i915_gpu_coredump(struct intel_gt *gt, intel_engine_mask_t engine_mask, u32 dump
 void i915_error_state_store(struct i915_gpu_coredump *error)
 {
 	struct drm_i915_private *i915;
-	static bool warned;
+	static int warned;
 
 	if (IS_ERR_OR_NULL(error))
 		return;
