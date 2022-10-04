@@ -690,7 +690,11 @@ i915_gem_shmem_pwrite(struct drm_i915_gem_object *obj,
 	 */
 	partial_cacheline_write = 0;
 	if (needs_clflush & CLFLUSH_BEFORE)
+#ifdef CONFIG_X86
 		partial_cacheline_write = boot_cpu_data.x86_clflush_size - 1;
+#else
+		partial_cacheline_write = SMP_CACHE_BYTES - 1;
+#endif
 
 	user_data = u64_to_user_ptr(args->data_ptr);
 	remain = args->size;
