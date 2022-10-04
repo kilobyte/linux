@@ -41,7 +41,7 @@
  * DOC: Panel Self Refresh (PSR/SRD)
  *
  * Since Haswell Display controller supports Panel Self-Refresh on display
- * panels witch have a remote frame buffer (RFB) implemented according to PSR
+ * panels which have a remote frame buffer (RFB) implemented according to PSR
  * spec in eDP1.3. PSR feature allows the display to go to lower standby states
  * when system is idle but display is on as it eliminates display refresh
  * request to DDR memory completely as long as the frame buffer for that
