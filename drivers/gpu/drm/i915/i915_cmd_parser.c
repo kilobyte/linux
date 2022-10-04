@@ -1180,6 +1180,7 @@ static u32 *copy_batch(struct drm_i915_gem_object *dst_obj,
 	}
 
 	src = ERR_PTR(-ENODEV);
+#ifdef CONFIG_X86
 	if (src_needs_clflush && i915_has_memcpy_from_wc()) {
 		src = i915_gem_object_pin_map(src_obj, I915_MAP_WC);
 		if (!IS_ERR(src)) {
@@ -1189,6 +1190,7 @@ static u32 *copy_batch(struct drm_i915_gem_object *dst_obj,
 			i915_gem_object_unpin_map(src_obj);
 		}
 	}
+#endif
 	if (IS_ERR(src)) {
 		unsigned long x, n, remain;
 		void *ptr;

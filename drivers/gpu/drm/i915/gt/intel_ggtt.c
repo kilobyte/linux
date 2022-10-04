@@ -1305,8 +1305,10 @@ void i915_ggtt_resume(struct i915_ggtt *ggtt)
 
 	ggtt->invalidate(ggtt);
 
+#ifdef CONFIG_X86
 	if (flush)
 		wbinvd_on_all_cpus();
+#endif
 
 	if (GRAPHICS_VER(ggtt->vm.i915) >= 8)
 		setup_private_pat(ggtt->vm.gt->uncore);

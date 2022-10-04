@@ -235,7 +235,9 @@ struct dma_buf *i915_gem_prime_export(struct drm_gem_object *gem_obj, int flags)
 
 static int i915_gem_object_get_pages_dmabuf(struct drm_i915_gem_object *obj)
 {
+#ifdef CONFIG_X86
 	struct drm_i915_private *i915 = to_i915(obj->base.dev);
+#endif
 	struct sg_table *pages;
 	unsigned int sg_page_sizes;
 
@@ -256,10 +258,14 @@ static int i915_gem_object_get_pages_dmabuf(struct drm_i915_gem_object *obj)
 	 * the underlying sg_table might not even point to struct pages, so we
 	 * can't just call drm_clflush_sg or similar, like we do elsewhere in
 	 * the driver.
+	 *
+	 * Non-x86 can have only discrete cards.
 	 */
+#ifdef CONFIG_X86
 	if (i915_gem_object_can_bypass_llc(obj) ||
 	    (!HAS_LLC(i915) && !IS_DG1(i915)))
 		wbinvd_on_all_cpus();
+#endif
 
 	sg_page_sizes = i915_sg_dma_sizes(pages->sgl);
 	__i915_gem_object_set_pages(obj, pages, sg_page_sizes);
