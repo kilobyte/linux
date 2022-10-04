@@ -638,6 +638,12 @@ out:
 	return err;
 }
 
+#ifdef CONFIG_X86
+# define HAS_CLFLUSH static_cpu_has(X86_FEATURE_CLFLUSH)
+#else
+# define HAS_CLFLUSH 0
+#endif
+
 /*
  * Pins the specified object's pages and synchronizes the object with
  * GPU accesses. Sets needs_clflush to non-zero if the caller should
@@ -665,7 +671,7 @@ int i915_gem_object_prepare_read(struct drm_i915_gem_object *obj,
 		return ret;
 
 	if (obj->cache_coherent & I915_BO_CACHE_COHERENT_FOR_READ ||
-	    !static_cpu_has(X86_FEATURE_CLFLUSH)) {
+	    !HAS_CLFLUSH) {
 		ret = i915_gem_object_set_to_cpu_domain(obj, false);
 		if (ret)
 			goto err_unpin;
@@ -716,7 +722,7 @@ int i915_gem_object_prepare_write(struct drm_i915_gem_object *obj,
 		return ret;
 
 	if (obj->cache_coherent & I915_BO_CACHE_COHERENT_FOR_WRITE ||
-	    !static_cpu_has(X86_FEATURE_CLFLUSH)) {
+	    !HAS_CLFLUSH) {
 		ret = i915_gem_object_set_to_cpu_domain(obj, true);
 		if (ret)
 			goto err_unpin;

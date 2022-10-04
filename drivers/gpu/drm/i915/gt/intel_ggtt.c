@@ -1260,8 +1260,10 @@ void i915_ggtt_resume(struct i915_ggtt *ggtt)
 
 	ggtt->invalidate(ggtt);
 
+#ifdef CONFIG_X86
 	if (flush)
 		wbinvd_on_all_cpus();
+#endif
 
 	intel_ggtt_restore_fences(ggtt);
 }
