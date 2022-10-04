@@ -76,7 +76,7 @@ i915_gem_mmap_ioctl(struct drm_device *dev, void *data,
 	if (args->flags & ~(I915_MMAP_WC))
 		return -EINVAL;
 
-	if (args->flags & I915_MMAP_WC && !pat_enabled())
+	if (args->flags & I915_MMAP_WC && !arch_can_pci_mmap_wc())
 		return -ENODEV;
 
 	obj = i915_gem_object_lookup(file, args->handle);
@@ -773,7 +773,7 @@ i915_gem_dumb_mmap_offset(struct drm_file *file,
 
 	if (HAS_LMEM(to_i915(dev)))
 		mmap_type = I915_MMAP_TYPE_FIXED;
-	else if (pat_enabled())
+	else if (arch_can_pci_mmap_wc())
 		mmap_type = I915_MMAP_TYPE_WC;
 	else if (!i915_ggtt_has_aperture(to_gt(i915)->ggtt))
 		return -ENODEV;
@@ -829,7 +829,7 @@ i915_gem_mmap_offset_ioctl(struct drm_device *dev, void *data,
 		break;
 
 	case I915_MMAP_OFFSET_WC:
-		if (!pat_enabled())
+		if (!arch_can_pci_mmap_wc())
 			return -ENODEV;
 		type = I915_MMAP_TYPE_WC;
 		break;
@@ -839,7 +839,7 @@ i915_gem_mmap_offset_ioctl(struct drm_device *dev, void *data,
 		break;
 
 	case I915_MMAP_OFFSET_UC:
-		if (!pat_enabled())
+		if (!arch_can_pci_mmap_wc())
 			return -ENODEV;
 		type = I915_MMAP_TYPE_UC;
 		break;
