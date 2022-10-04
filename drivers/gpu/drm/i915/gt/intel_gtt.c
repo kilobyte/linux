@@ -7,6 +7,7 @@
 
 #include <linux/fault-inject.h>
 #include <linux/sched/mm.h>
+#include <linux/mm.h>
 
 #include <drm/drm_cache.h>
 

@@ -9,6 +9,7 @@
 #include <linux/fault-inject.h>
 #include <linux/log2.h>
 #include <linux/random.h>
+#include <linux/mm.h>
 #include <linux/seq_file.h>
 #include <linux/stop_machine.h>
 

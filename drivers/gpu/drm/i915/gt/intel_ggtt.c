@@ -3,6 +3,7 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <linux/mm.h>
 #include <asm/set_memory.h>
 #include <asm/smp.h>
 #include <linux/types.h>
