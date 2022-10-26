@@ -60,7 +60,12 @@ intel_alloc_mchbar_resource(struct drm_i915_private *i915)
 				     &i915->gmch.mch_res,
 				     MCHBAR_SIZE, MCHBAR_SIZE,
 				     PCIBIOS_MIN_MEM,
-				     0, pcibios_align_resource,
+				     0,
+#ifdef CONFIG_ISA
+				     pcibios_align_resource,
+#else
+				     0,
+#endif
 				     i915->gmch.pdev);
 	if (ret) {
 		drm_dbg(&i915->drm, "failed bus alloc: %d\n", ret);
