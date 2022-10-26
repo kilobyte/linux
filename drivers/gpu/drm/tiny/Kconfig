@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
 config DRM_ARCPGU
-	tristate "ARC PGU"
+	tristate "Synopsys ARC PGU"
 	depends on DRM && OF
 	select DRM_GEM_DMA_HELPER
 	select DRM_KMS_HELPER
 	help
-	  Choose this option if you have an ARC PGU controller.
+	  Choose this option if you have a Synopsys ARC PGU controller.
 
 	  If M is selected the module will be called arcpgu.
 
