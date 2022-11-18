@@ -740,6 +740,12 @@ _request_firmware_prepare(struct firmware **firmware_p, const char *name,
 		return -ENOMEM;
 	}
 
+	if (device) {
+		printk("request_firmware: %s÷%s wants ｢%s｣\n",
+			dev_driver_string(device), dev_name(device), name);
+	} else
+		printk("request_firmware: NULL wants ｢%s｣\n", name);
+
 	if (firmware_request_builtin_buf(firmware, name, dbuf, size)) {
 		dev_dbg(device, "using built-in %s\n", name);
 		return 0; /* assigned */
