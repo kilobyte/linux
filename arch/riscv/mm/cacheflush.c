@@ -86,6 +86,7 @@ void flush_icache_pte(pte_t pte)
 	if (!test_and_set_bit(PG_dcache_clean, &page->flags))
 		flush_icache_all();
 }
+EXPORT_SYMBOL(flush_icache_pte);
 #endif /* CONFIG_MMU */
 
 unsigned int riscv_cbom_block_size;
