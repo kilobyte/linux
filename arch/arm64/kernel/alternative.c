@@ -208,7 +208,7 @@ void apply_alternatives_vdso(void)
 
 	hdr = (struct elf64_hdr *)vdso_start;
 	shdr = (void *)hdr + hdr->e_shoff;
-	alt = find_section(hdr, shdr, ".altinstructions");
+	alt = find_elf_section(hdr, shdr, ".altinstructions");
 	if (!alt)
 		return;
 

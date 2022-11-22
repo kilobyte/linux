@@ -489,7 +489,7 @@ static int module_init_ftrace_plt(const Elf_Ehdr *hdr,
 	const Elf_Shdr *s;
 	struct plt_entry *plts;
 
-	s = find_section(hdr, sechdrs, ".text.ftrace_trampoline");
+	s = find_elf_section(hdr, sechdrs, ".text.ftrace_trampoline");
 	if (!s)
 		return -ENOEXEC;
 
@@ -510,7 +510,7 @@ int module_finalize(const Elf_Ehdr *hdr,
 		    struct module *me)
 {
 	const Elf_Shdr *s;
-	s = find_section(hdr, sechdrs, ".altinstructions");
+	s = find_elf_section(hdr, sechdrs, ".altinstructions");
 	if (s)
 		apply_alternatives_module((void *)s->sh_addr, s->sh_size);
 

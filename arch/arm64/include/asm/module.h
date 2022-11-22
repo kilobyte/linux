@@ -59,7 +59,7 @@ static inline bool is_forbidden_offset_for_adrp(void *place)
 
 struct plt_entry get_plt_entry(u64 dst, void *pc);
 
-static inline const Elf_Shdr *find_section(const Elf_Ehdr *hdr,
+static inline const Elf_Shdr *find_elf_section(const Elf_Ehdr *hdr,
 				    const Elf_Shdr *sechdrs,
 				    const char *name)
 {
