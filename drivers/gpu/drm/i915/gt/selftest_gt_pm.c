@@ -168,12 +168,14 @@ static int live_gt_resume(void *arg)
 			break;
 		}
 
+#ifdef CONFIG_X86
 		err = st_llc_verify(&gt->llc);
 		if (err) {
 			pr_err("llc state not restored upon resume!\n");
 			intel_gt_set_wedged_on_init(gt);
 			break;
 		}
+#endif
 	} while (!__igt_timeout(end_time, NULL));
 
 	return err;
