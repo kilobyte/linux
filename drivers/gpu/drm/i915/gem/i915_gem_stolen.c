@@ -944,6 +944,7 @@ struct intel_memory_region*
 i915_gem_stolen_smem_setup(struct drm_i915_private *i915, u16 type,
 			   u16 instance)
 {
+#ifdef CONFIG_X86
 	struct intel_memory_region *mem;
 
 	mem = intel_memory_region_create(i915,
@@ -959,6 +960,9 @@ i915_gem_stolen_smem_setup(struct drm_i915_private *i915, u16 type,
 	mem->private = true;
 
 	return mem;
+#else
+	return ERR_PTR(-ENOMEM);
+#endif
 }
 
 bool i915_gem_object_is_stolen(const struct drm_i915_gem_object *obj)

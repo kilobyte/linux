@@ -328,6 +328,7 @@ int intel_memory_regions_hw_probe(struct drm_i915_private *i915)
 				mem = i915_gem_shmem_setup(i915, type,
 							   instance);
 			break;
+#ifdef CONFIG_X86
 		case INTEL_MEMORY_STOLEN_LOCAL:
 			mem = i915_gem_stolen_lmem_setup(i915, type, instance);
 			if (!IS_ERR(mem))
@@ -338,6 +339,7 @@ int intel_memory_regions_hw_probe(struct drm_i915_private *i915)
 			if (!IS_ERR(mem))
 				i915->mm.stolen_region = mem;
 			break;
+#endif
 		default:
 			continue;
 		}
