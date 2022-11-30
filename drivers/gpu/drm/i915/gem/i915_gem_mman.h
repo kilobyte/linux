@@ -10,6 +10,10 @@
 #include <linux/mm_types.h>
 #include <linux/types.h>
 
+#ifndef PAGE_KERNEL_IO
+# define PAGE_KERNEL_IO PAGE_KERNEL
+#endif
+
 struct drm_device;
 struct drm_file;
 struct drm_i915_gem_object;

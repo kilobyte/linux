@@ -2,13 +2,13 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "gem/i915_gem_mman.h"
-#include "gt/intel_engine_user.h"
-
 #include "i915_cmd_parser.h"
 #include "i915_drv.h"
 #include "i915_getparam.h"
 #include "i915_perf.h"
+
+#include "gem/i915_gem_mman.h"
+#include "gt/intel_engine_user.h"
 
 int i915_getparam_ioctl(struct drm_device *dev, void *data,
 			struct drm_file *file_priv)
