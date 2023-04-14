@@ -5,6 +5,7 @@
 config INTEL_MEI_PXP
 	tristate "Intel PXP services of ME Interface"
 	select INTEL_MEI_ME
+	depends on X86 && PCI
 	depends on DRM_I915
 	help
 	  MEI Support for PXP Services on Intel platforms.
